@@ -9,6 +9,7 @@ from user_agents import parse
 import logging
 import maxminddb
 from datetime import datetime, timedelta
+from sqlalchemy import func
 
 LOG_FILE = "/app/logs/access.log"
 CITY_DB = "/app/geoip/city.mmdb"
@@ -64,17 +65,26 @@ class LogHandler(FileSystemEventHandler):
     def process_new_lines(self):
         session = SessionLocal()
         try:
+            # Get latest timestamp from DB to avoid unnecessary duplicates
+            latest_db_entry = session.query(func.max(AccessLog.start_local)).scalar()
+            
             with open(LOG_FILE, 'r') as f:
                 f.seek(self.last_pos)
                 for line in f:
                     try:
                         data = json.loads(line)
+                        log_time = pd.to_datetime(data.get('StartLocal'))
+                        
+                        # Skip if we already have this in DB (based on time)
+                        if latest_db_entry and log_time <= latest_db_entry:
+                            continue
+
                         ip = self.clean_ip(data.get('ClientAddr', ''))
                         geo_info = self.geo.resolve(ip)
                         ua = parse(data.get('RequestUserAgent', ''))
                         
                         session.add(AccessLog(
-                            start_local=pd.to_datetime(data.get('StartLocal')),
+                            start_local=log_time,
                             client_addr=ip,
                             country_code=geo_info["country"],
                             city_name=geo_info["city"],
@@ -97,12 +107,14 @@ class LogHandler(FileSystemEventHandler):
                         session.commit()
                     except:
                         session.rollback()
+                        continue
                 self.last_pos = f.tell()
         finally:
             session.close()
 
 def prune_logs():
     days = int(os.getenv("RETENTION_DAYS", "30"))
+    if days <= 0: return # Disable pruning if set to 0
     cutoff = datetime.now() - timedelta(days=days)
     session = SessionLocal()
     try:
@@ -117,9 +129,10 @@ def prune_logs():
 if __name__ == "__main__":
     init_db()
     geo = GeoResolver()
-    logger.info("Worker started with GeoIP and Auto-Pruning.")
+    logger.info("Worker started with Persistence Mode.")
     
     handler = LogHandler(geo)
+    # Start from beginning to check for missing logs since last shutdown
     handler.last_pos = 0
     handler.process_new_lines()
     
