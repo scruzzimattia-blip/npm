@@ -24,10 +24,12 @@ services:
       RETENTION_DAYS: 30
       CROWDSEC_LAPI_URL: http://traefik-stats-crowdsec:8080
       CROWDSEC_LAPI_KEY: ${CROWDSEC_LAPI_KEY}
+      CROWDSEC_MACHINE_PASSWORD: ${CROWDSEC_MACHINE_PASSWORD}
     volumes:
       - /home/mattia/proxy/traefik/access.log:/app/logs/access.log:ro
       - /home/mattia/proxy/data/crowdsec/data/GeoLite2-City.mmdb:/app/geoip/city.mmdb:ro
       - /home/mattia/proxy/data/crowdsec/data/GeoLite2-ASN.mmdb:/app/geoip/asn.mmdb:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - proxy
 
@@ -42,8 +44,10 @@ services:
       DATABASE_URL: postgresql://user:password@db:5432/traefik_stats
       CROWDSEC_LAPI_URL: http://traefik-stats-crowdsec:8080
       CROWDSEC_LAPI_KEY: ${CROWDSEC_LAPI_KEY}
+      CROWDSEC_MACHINE_PASSWORD: ${CROWDSEC_MACHINE_PASSWORD}
     volumes:
       - /home/mattia/proxy/data/crowdsec/data/GeoLite2-City.mmdb:/app/geoip/city.mmdb:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - proxy
     ports:
@@ -62,6 +66,8 @@ services:
       - ./crowdsec_config:/etc/crowdsec
     networks:
       - proxy
+    ports:
+      - "8082:8080"
 
 networks:
   proxy:
