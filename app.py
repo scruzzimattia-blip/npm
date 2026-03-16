@@ -77,27 +77,28 @@ else:
             host_counts.columns = ['Host', 'Count']
             fig_hosts = px.bar(host_counts, x='Count', y='Host', orientation='h', color='Count')
             st.plotly_chart(fig_hosts, width='stretch')
-                    with col_right:
-                        st.subheader("Top Paths")
-                        path_counts = df['request_path'].value_counts().head(15).reset_index()
-                        path_counts.columns = ['Path', 'Count']
-                        fig_paths = px.bar(path_counts, x='Count', y='Path', orientation='h')
-                        st.plotly_chart(fig_paths, width='stretch')
+        
+        with col_right:
+            st.subheader("Top Paths")
+            path_counts = df['request_path'].value_counts().head(15).reset_index()
+            path_counts.columns = ['Path', 'Count']
+            fig_paths = px.bar(path_counts, x='Count', y='Path', orientation='h')
+            st.plotly_chart(fig_paths, width='stretch')
 
-                    st.subheader("Latency Heatmap (ms)")
-                    fig_lat = px.histogram(df, x='duration_ms', nbins=50, title="Latency Distribution", color_discrete_sequence=['#AB63FA'])
-                    st.plotly_chart(fig_lat, width='stretch')
+        st.subheader("Latency Heatmap (ms)")
+        fig_lat = px.histogram(df, x='duration_ms', nbins=50, title="Latency Distribution", color_discrete_sequence=['#AB63FA'])
+        st.plotly_chart(fig_lat, width='stretch')
 
-                with tab_security:
-                    col_s1, col_s2 = st.columns(2)
-
-                    with col_s1:
-                        st.subheader("HTTP Status Codes")
-                        status_dist = df['status_code'].value_counts().reset_index()
-                        status_dist.columns = ['Status', 'Count']
-                        fig_status = px.pie(status_dist, names='Status', values='Count', hole=0.4, 
-                                            color_discrete_sequence=px.colors.qualitative.Set3)
-                        st.plotly_chart(fig_status, width='stretch')
+    with tab_security:
+        col_s1, col_s2 = st.columns(2)
+        
+        with col_s1:
+            st.subheader("HTTP Status Codes")
+            status_dist = df['status_code'].value_counts().reset_index()
+            status_dist.columns = ['Status', 'Count']
+            fig_status = px.pie(status_dist, names='Status', values='Count', hole=0.4, 
+                                color_discrete_sequence=px.colors.qualitative.Set3)
+            st.plotly_chart(fig_status, width='stretch')
 
         with col_s2:
             st.subheader("Non-200/300 Response Paths")
