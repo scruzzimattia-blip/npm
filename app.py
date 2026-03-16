@@ -107,7 +107,7 @@ else:
         df = df[df['is_attack'] == True]
 
     # --- TABS ---
-    tabs = st.tabs(["📊 Dashboard", "🧠 God Insights", "🌊 Traffic Flow", "🗺️ Security Map", "🛡️ Audit", "🚀 Performance", "🛣️ Endpoints", "🌐 Sources", "🤖 Clients", "🕵️ Investigator", "📺 Live Stream", "🧪 Error Lab", "🏥 System Health"])
+    tabs = st.tabs(["📊 Dashboard", "🧠 God Insights", "🌊 Traffic Flow", "🗺️ Security Map", "🛡️ Audit", "🚀 Performance", "🛣️ Endpoints", "🌐 Sources", "🤖 Clients", "🕵️ Investigator", "📺 Live Stream", "🧪 Error Lab", "🛡️ CrowdSec Hub", "🏥 System Health"])
 
     with tabs[0]:
         c1, c2, c3, c4 = st.columns(4)
@@ -400,6 +400,10 @@ else:
                         st.error(f"🚫 **Blocked:** {cs_status.get('type')} (Origin: {cs_status.get('origin')})")
                         st.caption(f"Reason: {cs_status.get('reason')}")
                         st.caption(f"Until: {cs_status.get('until')}")
+                        if st.button("🔓 Unblock IP"):
+                            if cs.unblock_ip(ip_in):
+                                st.success(f"IP {ip_in} unblocked!")
+                                st.rerun()
                     else:
                         st.success("✅ **Not Blocked** in CrowdSec LAPI")
                         if st.button("🚫 Manual Block in CrowdSec"):
@@ -445,6 +449,39 @@ else:
             st.success("Clean sheets! No errors in the current selection.")
 
     with tabs[12]:
+        st.subheader("🛡️ CrowdSec Management Hub")
+        cs = CrowdSecManager()
+        
+        c_cs1, c_cs2 = st.columns([1, 2])
+        with c_cs1:
+            st.markdown("#### ➕ Manual Decision")
+            with st.form("block_form"):
+                block_ip = st.text_input("IP Address to Block")
+                block_dur = st.selectbox("Duration", ["1h", "24h", "72h", "168h", "720h"], index=1)
+                block_reason = st.text_input("Reason", value="Manual Admin Block")
+                if st.form_submit_button("🔨 Ban IP"):
+                    if block_ip:
+                        if cs.block_ip(block_ip, duration=block_dur, reason=block_reason):
+                            st.success(f"IP {block_ip} banned.")
+                            st.rerun()
+                        else: st.error("LAPI Error.")
+        
+        with c_cs2:
+            st.markdown("#### 📜 Active Decisions")
+            decisions = cs.get_all_decisions()
+            if decisions:
+                d_df = pd.DataFrame(decisions)
+                st.dataframe(d_df[['value', 'type', 'origin', 'duration', 'reason', 'until']], use_container_width=True)
+                
+                unblock_val = st.selectbox("Select IP to Unblock", options=[d['value'] for d in decisions])
+                if st.button("🔓 Remove Decision"):
+                    if cs.unblock_ip(unblock_val):
+                        st.success(f"Unblocked {unblock_val}")
+                        st.rerun()
+            else:
+                st.info("No active decisions in CrowdSec.")
+
+    with tabs[13]:
         st.subheader("🏥 System Health & Database")
         col_h1, col_h2 = st.columns(2)
         with col_h1:

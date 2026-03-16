@@ -49,6 +49,20 @@ services:
     ports:
       - "8501:8501"
 
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    restart: unless-stopped
+    environment:
+      COLLECTIONS: "crowdsecurity/traefik crowdsecurity/http-cve"
+      # We'll use the worker's detection mostly, but CrowdSec can also watch the logs
+    volumes:
+      - /home/mattia/proxy/traefik/access.log:/var/log/traefik/access.log:ro
+      - ./crowdsec_data:/var/lib/crowdsec/data
+      - ./crowdsec_config:/etc/crowdsec
+    networks:
+      - proxy
+
 networks:
   proxy:
     external: true

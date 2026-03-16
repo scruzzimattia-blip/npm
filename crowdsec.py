@@ -1,7 +1,7 @@
 import logging
 import requests
 import os
-from typing import Optional
+from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -15,40 +15,42 @@ class CrowdSecManager:
         }
 
     def block_ip(self, ip: str, duration: str = "24h", reason: str = "Traefik God Mode Detection"):
-        """
-        Create a decision in CrowdSec to block an IP.
-        Duration format: 24h, 1h, etc.
-        """
+        """Create a ban decision in CrowdSec."""
         if not self.api_key:
-            logger.warning("CrowdSec LAPI Key not set. Blocking disabled.")
             return False
 
         url = f"{self.api_url}/v1/decisions"
-        payload = [
-            {
-                "value": ip,
-                "scope": "Ip",
-                "type": "ban",
-                "origin": "traefik-god-mode",
-                "duration": duration,
-                "reason": reason
-            }
-        ]
+        payload = [{
+            "value": ip,
+            "scope": "Ip",
+            "type": "ban",
+            "origin": "traefik-god-mode",
+            "duration": duration,
+            "reason": reason
+        }]
 
         try:
-            logger.info(f"Blocking IP {ip} in CrowdSec for {duration}. Reason: {reason}")
             response = requests.post(url, headers=self.headers, json=payload, timeout=5)
-            if response.status_code == 201:
-                return True
-            else:
-                logger.error(f"CrowdSec LAPI Error: {response.status_code} - {response.text}")
-                return False
-        except Exception as e:
-            logger.error(f"Failed to connect to CrowdSec LAPI: {e}")
+            return response.status_code == 201
+        except:
+            return False
+
+    def unblock_ip(self, ip: str):
+        """Remove all active decisions for a specific IP."""
+        if not self.api_key:
+            return False
+
+        url = f"{self.api_url}/v1/decisions"
+        params = {"ip": ip}
+
+        try:
+            response = requests.delete(url, headers=self.headers, params=params, timeout=5)
+            return response.status_code == 200
+        except:
             return False
 
     def get_ip_reputation(self, ip: str) -> Optional[dict]:
-        """Check if an IP has any active decisions in CrowdSec."""
+        """Check if an IP has active decisions."""
         if not self.api_key:
             return None
 
@@ -57,12 +59,23 @@ class CrowdSecManager:
 
         try:
             response = requests.get(url, headers=self.headers, params=params, timeout=5)
-            response.raise_for_status()
-            decisions = response.json()
+            if response.status_code == 200:
+                decisions = response.json()
+                return decisions[0] if decisions else None
+        except:
+            pass
+        return None
 
-            if decisions and isinstance(decisions, list):
-                return decisions[0]
-            return None
-        except Exception as e:
-            logger.error(f"CrowdSec API error for IP {ip}: {e}")
-            return None
+    def get_all_decisions(self) -> List[dict]:
+        """List all current decisions (bans)."""
+        if not self.api_key:
+            return []
+
+        url = f"{self.api_url}/v1/decisions"
+        try:
+            response = requests.get(url, headers=self.headers, timeout=5)
+            if response.status_code == 200:
+                return response.json() or []
+        except:
+            pass
+        return []
