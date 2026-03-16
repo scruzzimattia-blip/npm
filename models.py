@@ -16,6 +16,7 @@ class AccessLog(Base):
     
     # Geo Data
     country_code = Column(String(5), index=True)
+    country_name = Column(String(100)) # Full Name for Maps
     city_name = Column(String(100))
     asn = Column(String(20), index=True)
     
@@ -27,8 +28,9 @@ class AccessLog(Base):
     request_referer = Column(String)
     request_user_agent = Column(String)
     
-    # Bot Detection
+    # Bot & Security Detection
     is_bot = Column(Boolean, default=False, index=True)
+    is_attack = Column(Boolean, default=False, index=True)
     browser_family = Column(String(50), index=True)
     os_family = Column(String(50), index=True)
     device_family = Column(String(50), index=True)
@@ -41,7 +43,6 @@ class AccessLog(Base):
     
     __table_args__ = (
         UniqueConstraint('start_local', 'client_addr', 'request_path', 'request_method', name='_req_uc'),
-        # Compound indexes for common dashboard filters
         Index('idx_host_status', 'request_host', 'status_code'),
         Index('idx_time_host', 'start_local', 'request_host'),
     )

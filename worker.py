@@ -10,6 +10,7 @@ import logging
 import maxminddb
 from datetime import datetime, timedelta
 from sqlalchemy import func
+import re
 
 LOG_FILE = "/app/logs/access.log"
 CITY_DB = "/app/geoip/city.mmdb"
@@ -18,31 +19,34 @@ ASN_DB = "/app/geoip/asn.mmdb"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Basic Attack Patterns
+ATTACK_PATTERNS = [
+    r"\.\./", r"etc/passwd", r"wp-login", r"sql", r"phpinfo", r"eval\(", 
+    r"base64_", r"\.env", r"cmd\.exe", r"/proc/self/", r"<script>", r"SELECT%20"
+]
+
 class GeoResolver:
     def __init__(self):
         self.city_reader = None
         self.asn_reader = None
         try:
-            if os.path.exists(CITY_DB):
-                self.city_reader = maxminddb.open_database(CITY_DB)
-            if os.path.exists(ASN_DB):
-                self.asn_reader = maxminddb.open_database(ASN_DB)
-        except Exception as e:
-            logger.error(f"GeoIP Load Error: {e}")
+            if os.path.exists(CITY_DB): self.city_reader = maxminddb.open_database(CITY_DB)
+            if os.path.exists(ASN_DB): self.asn_reader = maxminddb.open_database(ASN_DB)
+        except Exception as e: logger.error(f"GeoIP Error: {e}")
 
     def resolve(self, ip):
-        res = {"country": None, "city": None, "asn": None}
+        res = {"country_code": None, "country_name": None, "city": None, "asn": None}
         if not ip: return res
         try:
             if self.city_reader:
                 match = self.city_reader.get(ip)
                 if match:
-                    res["country"] = match.get('country', {}).get('iso_code')
+                    res["country_code"] = match.get('country', {}).get('iso_code')
+                    res["country_name"] = match.get('country', {}).get('names', {}).get('en')
                     res["city"] = match.get('city', {}).get('names', {}).get('en')
             if self.asn_reader:
                 match = self.asn_reader.get(ip)
-                if match:
-                    res["asn"] = f"AS{match.get('autonomous_system_number')}"
+                if match: res["asn"] = f"AS{match.get('autonomous_system_number')}"
         except: pass
         return res
 
@@ -50,8 +54,7 @@ class LogHandler(FileSystemEventHandler):
     def __init__(self, geo):
         self.geo = geo
         self.last_pos = 0
-        if os.path.exists(LOG_FILE):
-            self.last_pos = os.path.getsize(LOG_FILE)
+        if os.path.exists(LOG_FILE): self.last_pos = os.path.getsize(LOG_FILE)
 
     def on_modified(self, event):
         if event.src_path == LOG_FILE: self.process_new_lines()
@@ -62,40 +65,44 @@ class LogHandler(FileSystemEventHandler):
             return addr.split(']')[0].replace('[', '') if addr.startswith('[') else addr.rsplit(':', 1)[0]
         return addr
 
+    def is_attack(self, path):
+        if not path: return False
+        for p in ATTACK_PATTERNS:
+            if re.search(p, path, re.IGNORECASE): return True
+        return False
+
     def process_new_lines(self):
         session = SessionLocal()
         try:
-            # Get latest timestamp from DB to avoid unnecessary duplicates
             latest_db_entry = session.query(func.max(AccessLog.start_local)).scalar()
-            
             with open(LOG_FILE, 'r') as f:
                 f.seek(self.last_pos)
                 for line in f:
                     try:
                         data = json.loads(line)
                         log_time = pd.to_datetime(data.get('StartLocal'))
+                        if latest_db_entry and log_time <= latest_db_entry: continue
                         
-                        # Skip if we already have this in DB (based on time)
-                        if latest_db_entry and log_time <= latest_db_entry:
-                            continue
-
                         ip = self.clean_ip(data.get('ClientAddr', ''))
                         geo_info = self.geo.resolve(ip)
                         ua = parse(data.get('RequestUserAgent', ''))
+                        path = data.get('RequestPath', '')
                         
                         session.add(AccessLog(
                             start_local=log_time,
                             client_addr=ip,
-                            country_code=geo_info["country"],
+                            country_code=geo_info["country_code"],
+                            country_name=geo_info["country_name"],
                             city_name=geo_info["city"],
                             asn=geo_info["asn"],
                             request_method=data.get('RequestMethod'),
-                            request_path=data.get('RequestPath'),
+                            request_path=path,
                             request_host=data.get('RequestHost'),
                             request_protocol=data.get('RequestProtocol'),
                             request_referer=data.get('RequestReferer'),
                             request_user_agent=data.get('RequestUserAgent'),
                             is_bot=ua.is_bot,
+                            is_attack=self.is_attack(path),
                             browser_family=ua.browser.family,
                             os_family=ua.os.family,
                             device_family=ua.device.family,
@@ -107,46 +114,37 @@ class LogHandler(FileSystemEventHandler):
                         session.commit()
                     except:
                         session.rollback()
-                        continue
                 self.last_pos = f.tell()
         finally:
             session.close()
 
 def prune_logs():
     days = int(os.getenv("RETENTION_DAYS", "30"))
-    if days <= 0: return # Disable pruning if set to 0
+    if days <= 0: return
     cutoff = datetime.now() - timedelta(days=days)
     session = SessionLocal()
     try:
         deleted = session.query(AccessLog).filter(AccessLog.start_local < cutoff).delete()
         session.commit()
-        if deleted: logger.info(f"Pruned {deleted} old log entries.")
-    except Exception as e:
-        logger.error(f"Prune Error: {e}")
-    finally:
-        session.close()
+    except Exception as e: logger.error(f"Prune Error: {e}")
+    finally: session.close()
 
 if __name__ == "__main__":
     init_db()
     geo = GeoResolver()
-    logger.info("Worker started with Persistence Mode.")
-    
+    logger.info("Ultra Worker started (Attack Detection enabled).")
     handler = LogHandler(geo)
-    # Start from beginning to check for missing logs since last shutdown
     handler.last_pos = 0
     handler.process_new_lines()
-    
     observer = Observer()
     observer.schedule(handler, path=os.path.dirname(LOG_FILE), recursive=False)
     observer.start()
-    
     last_prune = time.time()
     try:
         while True:
-            if time.time() - last_prune > 3600: # Every hour
+            if time.time() - last_prune > 3600:
                 prune_logs()
                 last_prune = time.time()
             time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
+    except KeyboardInterrupt: observer.stop()
     observer.join()
