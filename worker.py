@@ -2,32 +2,11 @@ import os
 import json
 import time
 import pandas as pd
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, UniqueConstraint
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from models import init_db, SessionLocal, AccessLog
 
-DB_URL = os.getenv("DATABASE_URL", "postgresql://user:password@db:5432/traefik_stats")
 LOG_FILE = "/app/logs/access.log"
-
-Base = declarative_base()
-class AccessLog(Base):
-    __tablename__ = 'access_logs'
-    id = Column(Integer, primary_key=True)
-    start_local = Column(DateTime)
-    client_addr = Column(String)
-    request_method = Column(String)
-    request_path = Column(String)
-    request_host = Column(String)
-    entry_point = Column(String)
-    status_code = Column(Integer)
-    duration = Column(Integer)
-    __table_args__ = (UniqueConstraint('start_local', 'client_addr', 'request_path', name='_req_uc'),)
-
-engine = create_engine(DB_URL)
-Session = sessionmaker(bind=engine)
-Base.metadata.create_all(engine)
 
 class LogHandler(FileSystemEventHandler):
     def __init__(self):
@@ -40,7 +19,7 @@ class LogHandler(FileSystemEventHandler):
             self.process_new_lines()
 
     def process_new_lines(self):
-        session = Session()
+        session = SessionLocal()
         try:
             with open(LOG_FILE, 'r') as f:
                 f.seek(self.last_pos)
@@ -53,9 +32,13 @@ class LogHandler(FileSystemEventHandler):
                             request_method=data.get('RequestMethod'),
                             request_path=data.get('RequestPath'),
                             request_host=data.get('RequestHost'),
+                            request_protocol=data.get('RequestProtocol'),
+                            request_referer=data.get('RequestReferer'),
+                            request_user_agent=data.get('RequestUserAgent'),
                             entry_point=data.get('EntryPointName'),
                             status_code=int(data.get('DownstreamStatus', 0)),
-                            duration=int(data.get('Duration', 0))
+                            duration=int(data.get('Duration', 0)),
+                            content_size=int(data.get('DownstreamContentSize', 0))
                         )
                         session.add(log_entry)
                         session.commit()
@@ -67,6 +50,7 @@ class LogHandler(FileSystemEventHandler):
             session.close()
 
 if __name__ == "__main__":
+    init_db()
     print(f"Starting worker, monitoring {LOG_FILE}...")
     
     # Initial processing of existing logs
