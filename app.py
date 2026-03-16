@@ -67,16 +67,29 @@ else:
     now = datetime.now()
     df = df_full.copy()
     
+    # Selection and Previous Period calculation
     if date_mode == "Presets":
         preset = st.sidebar.selectbox("Range", ["1h", "24h", "7d", "30d", "All Time"], index=1)
-        if preset == "1h": df = df[df['start_local'] > (now - timedelta(hours=1))]
-        elif preset == "24h": df = df[df['start_local'] > (now - timedelta(days=1))]
-        elif preset == "7d": df = df[df['start_local'] > (now - timedelta(days=7))]
-        elif preset == "30d": df = df[df['start_local'] > (now - timedelta(days=30))]
+        if preset == "1h": 
+            df = df[df['start_local'] > (now - timedelta(hours=1))]
+            df_prev = df_full[(df_full['start_local'] <= (now - timedelta(hours=1))) & (df_full['start_local'] > (now - timedelta(hours=2)))]
+        elif preset == "24h": 
+            df = df[df['start_local'] > (now - timedelta(days=1))]
+            df_prev = df_full[(df_full['start_local'] <= (now - timedelta(days=1))) & (df_full['start_local'] > (now - timedelta(days=2)))]
+        elif preset == "7d": 
+            df = df[df['start_local'] > (now - timedelta(days=7))]
+            df_prev = df_full[(df_full['start_local'] <= (now - timedelta(days=7))) & (df_full['start_local'] > (now - timedelta(days=14)))]
+        elif preset == "30d": 
+            df = df[df['start_local'] > (now - timedelta(days=30))]
+            df_prev = df_full[(df_full['start_local'] <= (now - timedelta(days=30))) & (df_full['start_local'] > (now - timedelta(days=60)))]
+        else:
+            df_prev = pd.DataFrame() # No comparison for All Time
     else:
         start_date = st.sidebar.date_input("Start", now - timedelta(days=7))
         end_date = st.sidebar.date_input("End", now)
         df = df[(df['start_local'].dt.date >= start_date) & (df['start_local'].dt.date <= end_date)]
+        # For custom range, just use empty comparison for now
+        df_prev = pd.DataFrame()
 
     hosts = st.sidebar.multiselect("Active Hosts", options=sorted(df['request_host'].unique()), default=df['request_host'].unique())
     if hosts: df = df[df['request_host'].isin(hosts)]
@@ -93,16 +106,43 @@ else:
         df = df[df['is_attack'] == True]
 
     # --- TABS ---
-    tabs = st.tabs(["📊 Dashboard", "🧠 God Insights", "🌊 Traffic Flow", "🗺️ Security Map", "🛡️ Audit", "🚀 Performance", "🛣️ Endpoints", "🌐 Sources", "🤖 Clients", "🕵️ Investigator", "📺 Live Stream", "🧪 Error Lab"])
+    tabs = st.tabs(["📊 Dashboard", "🧠 God Insights", "🌊 Traffic Flow", "🗺️ Security Map", "🛡️ Audit", "🚀 Performance", "🛣️ Endpoints", "🌐 Sources", "🤖 Clients", "🕵️ Investigator", "📺 Live Stream", "🧪 Error Lab", "🏥 System Health"])
 
     with tabs[0]:
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Hits", f"{len(df):,}")
-        c2.metric("Attack Volume", f"{len(df[df['is_attack'] == True]):,}", delta=f"{(len(df[df['is_attack']==True])/len(df)*100):.1f}% of traffic", delta_color="inverse")
-        c3.metric("Unique IPs", f"{df['client_addr'].nunique():,}")
-        c4.metric("Bandwidth", f"{df['content_size'].sum()/(1024**2):.2f} MB")
+        
+        # Helper for deltas
+        def get_delta(current, prev):
+            if prev is None or prev == 0: return None
+            return f"{((current/prev)-1)*100:+.1f}%"
 
-        st.subheader("Real-time Pulse")
+        # Total Hits
+        cur_hits = len(df)
+        prev_hits = len(df_prev) if not df_prev.empty else 0
+        c1.metric("Total Hits", f"{cur_hits:,}", delta=get_delta(cur_hits, prev_hits))
+        
+        # Attack Volume
+        cur_atk = len(df[df['is_attack'] == True])
+        prev_atk = len(df_prev[df_prev['is_attack'] == True]) if not df_prev.empty else 0
+        c2.metric("Attack Volume", f"{cur_atk:,}", delta=get_delta(cur_atk, prev_atk), delta_color="inverse")
+        
+        # Unique IPs
+        cur_ips = df['client_addr'].nunique()
+        prev_ips = df_prev['client_addr'].nunique() if not df_prev.empty else 0
+        c3.metric("Unique IPs", f"{cur_ips:,}", delta=get_delta(cur_ips, prev_ips))
+        
+        # Bandwidth
+        cur_bw = df['content_size'].sum()/(1024**2)
+        prev_bw = df_prev['content_size'].sum()/(1024**2) if not df_prev.empty else 0
+        c4.metric("Bandwidth", f"{cur_bw:.2f} MB", delta=get_delta(cur_bw, prev_bw))
+
+        st.subheader("🌐 Real-time Global Pulse")
+        geo_counts = df.groupby(['country_name', 'country_code']).size().reset_index(name='Requests')
+        st.plotly_chart(px.scatter_geo(geo_counts, locations="country_code", hover_name="country_name", size="Requests",
+                                 projection="natural earth", template="plotly_dark", color="Requests",
+                                 color_continuous_scale=px.colors.sequential.Viridis), use_container_width=True)
+
+        st.subheader("Real-time Activity")
         timeline = df.set_index('start_local').groupby([pd.Grouper(freq='1min'), 'status_group']).size().unstack(fill_value=0).reset_index()
         st.plotly_chart(px.area(timeline, x='start_local', y=timeline.columns[1:], template="plotly_dark", color_discrete_sequence=px.colors.qualitative.Safe), use_container_width=True)
         
@@ -384,6 +424,39 @@ else:
             st.plotly_chart(px.line(err_timeline, x='start_local', y=err_timeline.columns[1:], template="plotly_dark"), use_container_width=True)
         else:
             st.success("Clean sheets! No errors in the current selection.")
+
+    with tabs[12]:
+        st.subheader("🏥 System Health & Database")
+        col_h1, col_h2 = st.columns(2)
+        with col_h1:
+            st.write("**Database Statistics**")
+            try:
+                from sqlalchemy import text
+                with engine.connect() as conn:
+                    db_size = conn.execute(text("SELECT pg_size_pretty(pg_database_size(current_database()))")).scalar()
+                    row_count = conn.execute(text("SELECT count(*) FROM access_logs")).scalar()
+                    earliest = conn.execute(text("SELECT min(start_local) FROM access_logs")).scalar()
+                
+                st.info(f"**DB Size:** {db_size} | **Total Rows:** {row_count:,}")
+                st.info(f"**Retention Start:** {earliest.strftime('%Y-%m-%d %H:%M:%S') if earliest else 'N/A'}")
+            except Exception as e:
+                st.error(f"Error fetching DB stats: {e}")
+        
+        with col_h2:
+            st.write("**Maintenance Controls**")
+            if st.button("🧹 Force Manual Prune (Keep last 30 days)"):
+                try:
+                    from sqlalchemy import text
+                    cutoff = datetime.now() - timedelta(days=30)
+                    with engine.begin() as conn:
+                        res = conn.execute(text("DELETE FROM access_logs WHERE start_local < :cutoff"), {"cutoff": cutoff})
+                        st.success(f"Pruned {res.rowcount} old records.")
+                except Exception as e:
+                    st.error(f"Pruning failed: {e}")
+            
+            if st.button("🔄 Clear App Cache"):
+                st.cache_data.clear()
+                st.success("Cache cleared successfully.")
 
     st.sidebar.markdown("---")
     st.sidebar.caption(f"Last Pulse: {datetime.now().strftime('%H:%M:%S')}")

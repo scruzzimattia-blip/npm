@@ -105,8 +105,9 @@ class LogHandler(FileSystemEventHandler):
                         path = data.get('RequestPath', '')
                         
                         attack = self.is_attack(path)
-                        # Optional: also mark as attack if rate limited
-                        # if not attack: attack = self.check_rate_limit(session, ip)
+                        # Mark as attack if rate limited
+                        if not attack: 
+                            attack = self.check_rate_limit(session, ip)
                         
                         session.add(AccessLog(
                             start_local=log_time,
