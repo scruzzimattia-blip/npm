@@ -5,8 +5,14 @@ import pandas as pd
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from models import init_db, SessionLocal, AccessLog
+from user_agents import parse
+import logging
 
 LOG_FILE = "/app/logs/access.log"
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class LogHandler(FileSystemEventHandler):
     def __init__(self):
@@ -18,6 +24,16 @@ class LogHandler(FileSystemEventHandler):
         if event.src_path == LOG_FILE:
             self.process_new_lines()
 
+    def clean_ip(self, client_addr):
+        if not client_addr:
+            return ""
+        if ':' in client_addr:
+            if client_addr.startswith('['):
+                return client_addr.split(']')[0].replace('[', '')
+            else:
+                return client_addr.rsplit(':', 1)[0]
+        return client_addr
+
     def process_new_lines(self):
         session = SessionLocal()
         try:
@@ -27,25 +43,37 @@ class LogHandler(FileSystemEventHandler):
                     try:
                         data = json.loads(line)
                         
-                        # Clean IP address (strip port)
-                        client_addr = data.get('ClientAddr', '')
-                        if ':' in client_addr:
-                            if client_addr.startswith('['):
-                                # IPv6 format: [2001:db8::1]:12345
-                                client_addr = client_addr.split(']')[0].replace('[', '')
-                            else:
-                                # IPv4 format: 1.2.3.4:12345
-                                client_addr = client_addr.rsplit(':', 1)[0]
-
+                        # Clean IP address
+                        client_ip = self.clean_ip(data.get('ClientAddr', ''))
+                        
+                        # Parse User-Agent
+                        ua_string = data.get('RequestUserAgent', '')
+                        ua = parse(ua_string)
+                        
                         log_entry = AccessLog(
                             start_local=pd.to_datetime(data.get('StartLocal')),
-                            client_addr=client_addr,
+                            client_addr=client_ip,
+                            
+                            # Geo (Placeholder for now)
+                            country_code=None,
+                            city_name=None,
+                            asn=None,
+                            
+                            # Request
                             request_method=data.get('RequestMethod'),
                             request_path=data.get('RequestPath'),
                             request_host=data.get('RequestHost'),
                             request_protocol=data.get('RequestProtocol'),
                             request_referer=data.get('RequestReferer'),
-                            request_user_agent=data.get('RequestUserAgent'),
+                            request_user_agent=ua_string,
+                            
+                            # Bot Detection
+                            is_bot=ua.is_bot,
+                            browser_family=ua.browser.family,
+                            os_family=ua.os.family,
+                            device_family=ua.device.family,
+                            
+                            # Traefik Data
                             entry_point=data.get('EntryPointName'),
                             status_code=int(data.get('DownstreamStatus', 0)),
                             duration=int(data.get('Duration', 0)),
@@ -53,7 +81,7 @@ class LogHandler(FileSystemEventHandler):
                         )
                         session.add(log_entry)
                         session.commit()
-                    except Exception:
+                    except Exception as e:
                         session.rollback()
                         continue
                 self.last_pos = f.tell()
@@ -62,11 +90,11 @@ class LogHandler(FileSystemEventHandler):
 
 if __name__ == "__main__":
     init_db()
-    print(f"Starting worker, monitoring {LOG_FILE}...")
+    logger.info(f"Starting worker, monitoring {LOG_FILE}...")
     
     # Initial processing of existing logs
     handler = LogHandler()
-    handler.last_pos = 0 # Start from beginning on first run
+    handler.last_pos = 0 
     handler.process_new_lines()
     
     observer = Observer()
