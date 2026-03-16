@@ -7,3 +7,5 @@ psycopg2-binary
 watchdog
 user-agents
 maxminddb
+pytest
+pytest-mock
