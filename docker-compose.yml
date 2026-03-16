@@ -1,0 +1,15 @@
+services:
+  traefik-stats:
+    build: .
+    container_name: traefik-stats
+    restart: unless-stopped
+    volumes:
+      - /home/mattia/proxy/traefik/access.log:/app/logs/access.log:ro
+    networks:
+      - proxy
+    ports:
+      - "8501:8501"
+
+networks:
+  proxy:
+    external: true
