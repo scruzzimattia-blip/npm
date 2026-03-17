@@ -46,12 +46,15 @@ class AccessLog(Base):
         Index('idx_time_host', 'start_local', 'request_host'),
     )
 
-engine = create_engine(
-    DB_URL,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True
-)
+# Engine configuration (Postgres uses pooling, SQLite/CI doesn't support these specific args)
+engine_args = {"pool_pre_ping": True}
+if not DB_URL.startswith("sqlite"):
+    engine_args.update({
+        "pool_size": 10,
+        "max_overflow": 20
+    })
+
+engine = create_engine(DB_URL, **engine_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
