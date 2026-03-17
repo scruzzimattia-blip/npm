@@ -108,7 +108,11 @@ class PrecomputedStats(Base):
         Index('idx_stat_period', 'stat_type', 'period'),
     )
 
-engine = create_engine(DB_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
+engine_args = {"pool_pre_ping": True}
+if not DB_URL.startswith("sqlite"):
+    engine_args.update({"pool_size": 10, "max_overflow": 20})
+
+engine = create_engine(DB_URL, **engine_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
