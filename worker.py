@@ -31,7 +31,11 @@ ATTACK_PATTERNS = [
     r"\.git", r"\.svn", r"\.htaccess", r"id_rsa", r"id_dsa", r"shadow", r"htpasswd"
 ]
 
-def is_local_ip(ip_str):
+def should_ignore_ip(ip_str):
+    # Manual ignore list from environment or hardcoded
+    ignored = set(os.getenv("IGNORED_IPS", "92.106.189.142").split(","))
+    if ip_str in ignored:
+        return True
     try:
         ip = ipaddress.ip_address(ip_str)
         return ip.is_private or ip.is_loopback or ip.is_link_local
@@ -127,8 +131,8 @@ class LogHandler(FileSystemEventHandler):
                         
                         ip = self.clean_ip(data.get('ClientAddr', ''))
                         
-                        # Skip monitoring for local IPs
-                        if is_local_ip(ip):
+                        # Skip monitoring for ignored IPs
+                        if should_ignore_ip(ip):
                             continue
 
                         geo_info = self.geo.resolve(ip)
