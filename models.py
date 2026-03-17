@@ -1,7 +1,10 @@
 import os
+import logging
 from datetime import datetime
 from sqlalchemy import create_engine, Column, String, Integer, DateTime, BigInteger, Boolean, UniqueConstraint, Index, Text, Float
 from sqlalchemy.orm import sessionmaker, declarative_base
+
+logger = logging.getLogger(__name__)
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql://user:password@db:5432/traefik_stats")
 
@@ -110,3 +113,21 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    migrate_new_columns()
+
+def migrate_new_columns():
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            columns_to_add = [
+                ("is_login_attempt", "BOOLEAN DEFAULT FALSE"),
+                ("threat_score", "INTEGER DEFAULT 0")
+            ]
+            for col_name, col_def in columns_to_add:
+                try:
+                    conn.execute(text(f"ALTER TABLE access_logs ADD COLUMN {col_name} {col_def}"))
+                    conn.commit()
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning(f"Migration check skipped: {e}")
