@@ -36,40 +36,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:buildx-stable-1
-            network=host
-
-      - name: Login to Gitea Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: 192.168.1.41:3000
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: Login to Gitea Registry
+        run: |
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login 192.168.1.41:3000 --username "${{ github.actor }}" --password-stdin
 
       - name: Build and push worker image
-        continue-on-error: true
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile.worker
-          push: true
-          tags: 192.168.1.41:3000/Mattia/traefik-stats/traefik-stats-worker:${{ github.sha }},192.168.1.41:3000/Mattia/traefik-stats/traefik-stats-worker:latest
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME=$(echo "traefik-stats" | tr '[:upper:]' '[:lower:]')
+          
+          IMAGE_TAG_LATEST="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/traefik-stats-worker:latest"
+          IMAGE_TAG_SHA="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/traefik-stats-worker:${{ github.sha }}"
+          
+          docker build -f Dockerfile.worker -t ${IMAGE_TAG_LATEST} -t ${IMAGE_TAG_SHA} .
+          docker push ${IMAGE_TAG_LATEST}
+          docker push ${IMAGE_TAG_SHA}
 
       - name: Build and push app image
-        continue-on-error: true
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: 192.168.1.41:3000/Mattia/traefik-stats/traefik-stats-app:${{ github.sha }},192.168.1.41:3000/Mattia/traefik-stats/traefik-stats-app:latest
-
-      - name: Summary
         run: |
-          echo "Docker push completed (may have failed if registry not configured)"
-          echo "Worker: git.scruzzi.com/traefik-stats/traefik-stats-worker:${{ github.sha }}"
-          echo "App: git.scruzzi.com/traefik-stats/traefik-stats-app:${{ github.sha }}"
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME=$(echo "traefik-stats" | tr '[:upper:]' '[:lower:]')
+          
+          IMAGE_TAG_LATEST="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/traefik-stats-app:latest"
+          IMAGE_TAG_SHA="192.168.1.41:3000/${REPO_OWNER}/${REPO_NAME}/traefik-stats-app:${{ github.sha }}"
+          
+          docker build -t ${IMAGE_TAG_LATEST} -t ${IMAGE_TAG_SHA} .
+          docker push ${IMAGE_TAG_LATEST}
+          docker push ${IMAGE_TAG_SHA}
