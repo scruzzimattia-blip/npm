@@ -337,6 +337,7 @@ class LogHandler(FileSystemEventHandler):
 
     def is_attack(self, path: str) -> bool:
         if not path: return False
+        if "remote.php" in path: return False
         for p in ATTACK_PATTERNS_COMPILED:
             if p.search(path): return True
         return False
