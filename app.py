@@ -45,6 +45,10 @@ if df_full.empty:
     st.warning("⚠️ No traffic data found. God Mode is waiting for logs...")
     if st.button("🔄 Force Sync"): st.rerun()
 else:
+    # Ensure start_local is datetime (sometimes JSON serialization in cache makes it string)
+    if not df_full.empty and isinstance(df_full.iloc[0]['start_local'], str):
+        df_full['start_local'] = pd.to_datetime(df_full['start_local'])
+    
     # --- SIDEBAR ---
     st.sidebar.title("🎮 Command Center")
     
