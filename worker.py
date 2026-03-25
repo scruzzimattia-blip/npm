@@ -208,13 +208,42 @@ def calculate_threat_score(ip: str, path: str, is_attack: bool, status_code: int
     return min(score, 100)
 
 class GeoResolver:
+    """Manages MaxMindDB GeoIP lookups with proper resource cleanup."""
+    
     def __init__(self):
         self.city_reader = None
         self.asn_reader = None
         try:
-            if os.path.exists(CITY_DB): self.city_reader = maxminddb.open_database(CITY_DB)
-            if os.path.exists(ASN_DB): self.asn_reader = maxminddb.open_database(ASN_DB)
-        except Exception as e: logger.error(f"GeoIP Error: {e}")
+            if os.path.exists(CITY_DB): 
+                self.city_reader = maxminddb.open_database(CITY_DB)
+            if os.path.exists(ASN_DB): 
+                self.asn_reader = maxminddb.open_database(ASN_DB)
+        except Exception as e: 
+            logger.error(f"GeoIP Error: {e}")
+
+    def close(self):
+        """Close database readers to avoid resource leaks."""
+        try:
+            if self.city_reader:
+                self.city_reader.close()
+                self.city_reader = None
+        except Exception as e:
+            logger.debug(f"Error closing city reader: {e}")
+        
+        try:
+            if self.asn_reader:
+                self.asn_reader.close()
+                self.asn_reader = None
+        except Exception as e:
+            logger.debug(f"Error closing ASN reader: {e}")
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensure cleanup."""
+        self.close()
 
     def resolve(self, ip):
         """Resolve GeoIP information for an IP address."""
@@ -612,9 +641,13 @@ if __name__ == "__main__":
                 last_pattern_reload = current_time
                 
     except KeyboardInterrupt:
+        logger.info("Worker shutdown requested")
         observer.stop()
     except Exception as e:
         logger.error(f"Critical Worker Loop Error: {e}")
         notify_critical_error(f"Worker Loop Error: {e}")
         observer.stop()
-    observer.join()
+    finally:
+        observer.join()
+        geo.close()
+        logger.info("Worker cleanup completed")
