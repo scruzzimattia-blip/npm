@@ -29,7 +29,7 @@ MAX_PERIOD_LENGTH = 20
 MAX_STAT_KEY_LENGTH = 200
 
 class AccessLog(Base):
-    \"\"\"Web traffic access log entry with geo, security and performance data.\"\"\"
+    """Web traffic access log entry with geo, security and performance data."""
     __tablename__ = 'access_logs'
     
     id = Column(Integer, primary_key=True)
@@ -72,7 +72,7 @@ class AccessLog(Base):
     )
 
 class RateLimitEntry(Base):
-    \"\"\"IP-based rate limiting entry with soft ban tracking.\"\"\"
+    """IP-based rate limiting entry with soft ban tracking."""
     __tablename__ = 'rate_limits'
     
     id = Column(Integer, primary_key=True)
@@ -84,7 +84,7 @@ class RateLimitEntry(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 class LoginAttempt(Base):
-    \"\"\"Tracks attempted logins for brute-force detection.\"\"\"
+    """Tracks attempted logins for brute-force detection."""
     __tablename__ = 'login_attempts'
     
     id = Column(Integer, primary_key=True)
@@ -96,7 +96,7 @@ class LoginAttempt(Base):
     country_code = Column(String(MAX_COUNTRY_CODE_LENGTH))
 
 class BlockedCountry(Base):
-    \"\"\"Geo-blocking rules for country-level IP filtering.\"\"\"
+    """Geo-blocking rules for country-level IP filtering."""
     __tablename__ = 'blocked_countries'
     
     id = Column(Integer, primary_key=True)
@@ -106,7 +106,7 @@ class BlockedCountry(Base):
     active = Column(Boolean, default=True)
 
 class WorkerStats(Base):
-    \"\"\"Worker process statistics snapshot for monitoring.\"\"\"
+    """Worker process statistics snapshot for monitoring."""
     __tablename__ = 'worker_stats'
     
     id = Column(Integer, primary_key=True)
@@ -118,7 +118,7 @@ class WorkerStats(Base):
     avg_processing_time_ms = Column(Float, default=0)
 
 class PrecomputedStats(Base):
-    \"\"\"Cached aggregated statistics for faster dashboard queries.\"\"\"
+    """Cached aggregated statistics for faster dashboard queries."""
     __tablename__ = 'precomputed_stats'
     
     id = Column(Integer, primary_key=True)
