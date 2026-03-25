@@ -44,6 +44,16 @@ def _make_cache_key(prefix: str, *args, **kwargs) -> str:
     return key_str
 
 def _serialize(value: Any) -> str:
+    # If it's a pandas DataFrame, use its special serialization
+    if hasattr(value, 'to_json') and hasattr(value, 'empty') and hasattr(value, 'columns'):
+        try:
+            return json.dumps({
+                "__type": "pd.DataFrame",
+                "data": value.to_json(orient="split", date_format="iso")
+            })
+        except Exception as e:
+            logger.warning(f"DataFrame serialization failed: {e}")
+
     try:
         return json.dumps(value, default=str)
     except:
@@ -53,7 +63,16 @@ def _deserialize(value: Optional[str]) -> Any:
     if value is None:
         return None
     try:
-        return json.loads(value)
+        data = json.loads(value)
+        if isinstance(data, dict) and data.get("__type") == "pd.DataFrame":
+            try:
+                import pandas as pd
+                from io import StringIO
+                return pd.read_json(StringIO(data["data"]), orient="split")
+            except Exception as e:
+                logger.warning(f"Failed to deserialize DataFrame: {e}")
+                return data
+        return data
     except:
         return value
 

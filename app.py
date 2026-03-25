@@ -35,6 +35,12 @@ st.title("⚡ Traefik God Mode Monitor")
 data_limit = st.sidebar.select_slider("Data Scan Depth", options=[1000, 10000, 50000, 100000], value=50000)
 df_full = fetch_data(limit=data_limit)
 
+# Fix for AttributeError: 'str' object has no attribute 'empty' (legacy cache)
+if isinstance(df_full, str):
+    st.warning("⚠️ Stale data format detected in cache. Cleaning up...")
+    invalidate_cache()
+    st.rerun()
+
 if df_full.empty:
     st.warning("⚠️ No traffic data found. God Mode is waiting for logs...")
     if st.button("🔄 Force Sync"): st.rerun()
