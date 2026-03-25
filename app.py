@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import plotly.express as px
 import plotly.graph_objects as go
+import logging
 from models import engine, AccessLog, SessionLocal
 from crowdsec import CrowdSecManager
 from sqlalchemy import select, func
@@ -15,6 +16,8 @@ from data_service import (
     get_worker_stats, update_precomputed_stats
 )
 from streamlit_autorefresh import st_autorefresh
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Traefik God Mode Monitor", layout="wide", page_icon="⚡")
 
@@ -83,7 +86,8 @@ else:
                     row_count = conn.execute(text("SELECT count(*) FROM access_logs")).scalar()
                 st.write(f"💾 **DB Size:** {db_size}")
                 st.write(f"📈 **Rows:** {row_count:,}")
-            except: pass
+            except Exception as e:
+                logger.debug(f"Database info query failed: {e}")
         else:
             st.error("🔴 Worker Offline")
 

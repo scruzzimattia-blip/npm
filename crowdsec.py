@@ -127,8 +127,8 @@ class CrowdSecManager:
             if response.status_code == 200:
                 decisions = response.json()
                 return decisions[0] if decisions else None
-        except:
-            pass
+        except requests.RequestException as e:
+            logger.debug(f"Failed to get IP reputation for {ip}: {e}")
         return None
 
     def get_all_decisions(self, origin: Optional[str] = None) -> List[dict]:
@@ -145,6 +145,6 @@ class CrowdSecManager:
             response = requests.get(url, headers=self.bouncer_headers, params=params, timeout=5)
             if response.status_code == 200:
                 return response.json() or []
-        except:
-            pass
+        except requests.RequestException as e:
+            logger.debug(f"Failed to get all decisions: {e}")
         return []

@@ -26,13 +26,15 @@ def fetch_data(limit=50000):
 
 @cached(ttl=300, key_prefix="precomputed_stats")
 def fetch_precomputed_stats(stat_type: str, period: str = "24h") -> dict:
+    """Fetch precomputed statistics from database."""
     try:
         stats = SessionLocal().query(PrecomputedStats).filter(
             PrecomputedStats.stat_type == stat_type,
             PrecomputedStats.period == period
         ).all()
         return {s.key: s.value for s in stats}
-    except:
+    except Exception as e:
+        logger.error(f"Precomputed stats fetch error: {e}")
         return {}
 
 def update_precomputed_stats():
@@ -101,6 +103,7 @@ def format_bytes(size):
 
 @cached(ttl=3600, key_prefix="abuse_reputation")
 def get_abuse_reputation(ip):
+    """Get IP reputation from AbuseIPDB."""
     api_key = os.getenv("ABUSEIPDB_API_KEY")
     if not api_key:
         return None
@@ -113,8 +116,8 @@ def get_abuse_reputation(ip):
         response = requests.get(url, headers=headers, params=querystring, timeout=5)
         if response.status_code == 200:
             return response.json().get('data')
-    except Exception:
-        pass
+    except requests.RequestException as e:
+        logger.debug(f"AbuseIPDB lookup failed for {ip}: {e}")
     return None
 
 def get_total_logs_count(filter_attack=False):
@@ -236,6 +239,7 @@ def get_threat_leaders(limit=20):
         return pd.DataFrame()
 
 def get_blocked_countries():
+    """Get list of blocked countries."""
     cache_key = "traefik_stats:blocked_countries"
     cached = CacheService.get(cache_key)
     if cached is not None:
@@ -246,7 +250,8 @@ def get_blocked_countries():
         countries_data = [{"id": c.id, "country_code": c.country_code, "reason": c.reason, "added_at": c.added_at, "active": c.active} for c in countries]
         CacheService.set(cache_key, countries_data, ttl=60)
         return countries
-    except:
+    except Exception as e:
+        logger.error(f"Failed to fetch blocked countries: {e}")
         return []
 
 def add_blocked_country(country_code: str, reason: str = ""):
@@ -281,6 +286,7 @@ def remove_blocked_country(country_code: str):
     return False
 
 def get_worker_stats(hours=24):
+    """Get worker statistics for the last N hours."""
     try:
         cutoff = datetime.now() - timedelta(hours=hours)
         stats = SessionLocal().query(WorkerStats).filter(WorkerStats.timestamp > cutoff).all()
@@ -292,5 +298,6 @@ def get_worker_stats(hours=24):
             "db_errors": s.db_errors,
             "avg_processing_time_ms": s.avg_processing_time_ms
         } for s in stats]
-    except:
+    except Exception as e:
+        logger.error(f"Worker stats error: {e}")
         return []

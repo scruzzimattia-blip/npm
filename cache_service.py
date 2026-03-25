@@ -44,6 +44,7 @@ def _make_cache_key(prefix: str, *args, **kwargs) -> str:
     return key_str
 
 def _serialize(value: Any) -> str:
+    """Serialize value to JSON string, with special handling for DataFrames."""
     # If it's a pandas DataFrame, use its special serialization
     if hasattr(value, 'to_json') and hasattr(value, 'empty') and hasattr(value, 'columns'):
         try:
@@ -56,10 +57,12 @@ def _serialize(value: Any) -> str:
 
     try:
         return json.dumps(value, default=str)
-    except:
+    except (TypeError, ValueError) as e:
+        logger.warning(f"Serialization failed for {type(value)}: {e}")
         return str(value)
 
 def _deserialize(value: Optional[str]) -> Any:
+    """Deserialize JSON string back to value, with special handling for DataFrames."""
     if value is None:
         return None
     try:
@@ -75,10 +78,11 @@ def _deserialize(value: Optional[str]) -> Any:
                 try:
                     import pandas as pd
                     return pd.DataFrame()
-                except:
+                except ImportError:
                     return data
         return data
-    except:
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.debug(f"Deserialization failed: {e}")
         return value
 
 class CacheService:
@@ -153,12 +157,14 @@ class CacheService:
     
     @classmethod
     def exists(cls, key: str) -> bool:
+        """Check if a key exists in cache."""
         client = get_redis_client()
         if not client:
             return False
         try:
             return bool(client.exists(key))
-        except:
+        except redis.RedisError as e:
+            logger.debug(f"Cache exists error: {e}")
             return False
     
     @classmethod

@@ -98,10 +98,11 @@ def flush_stats():
         session.close()
 
 def try_int(val: Any) -> int:
+    """Safely convert value to int, returning 0 on failure."""
     try:
         if val is None or val == '': return 0
         return int(val)
-    except:
+    except (ValueError, TypeError):
         return 0
 
 class TraefikLogData(BaseModel):
@@ -216,6 +217,7 @@ class GeoResolver:
         except Exception as e: logger.error(f"GeoIP Error: {e}")
 
     def resolve(self, ip):
+        """Resolve GeoIP information for an IP address."""
         res = {"country_code": None, "country_name": None, "city": None, "asn": None}
         if not ip: return res
         try:
@@ -228,7 +230,8 @@ class GeoResolver:
             if self.asn_reader:
                 match = self.asn_reader.get(ip)
                 if match: res["asn"] = f"AS{match.get('autonomous_system_number')}"
-        except: pass
+        except (KeyError, TypeError, AttributeError) as e:
+            logger.debug(f"GeoIP resolution error for {ip}: {e}")
         return res
 
 RATE_LIMIT_THRESHOLD = int(os.getenv("RATE_LIMIT_THRESHOLD", "50"))
@@ -244,16 +247,18 @@ class LogHandler(FileSystemEventHandler):
         self.max_retries = 3
 
     def get_rate_limit_redis(self, ip: str) -> tuple[int, bool]:
+        """Get rate limit info from Redis, fallback to DB on error."""
         if redis_client:
             try:
                 error_count = int(redis_client.hget(f"ratelimit:{ip}", "count") or 0)
                 is_banned = redis_client.hget(f"ratelimit:{ip}", "banned") == "1"
                 return error_count, is_banned
-            except:
-                pass
+            except (redis.RedisError, ValueError, TypeError) as e:
+                logger.debug(f"Redis rate limit get error for {ip}: {e}")
         return self.get_rate_limit_db(ip)
 
     def set_rate_limit_redis(self, ip: str, count: int, banned: bool = False):
+        """Set rate limit info in Redis, fallback to DB on error."""
         if redis_client:
             try:
                 pipe = redis_client.pipeline()
@@ -262,8 +267,8 @@ class LogHandler(FileSystemEventHandler):
                 pipe.expire(f"ratelimit:{ip}", 3600)
                 pipe.execute()
                 return True
-            except:
-                pass
+            except redis.RedisError as e:
+                logger.debug(f"Redis rate limit set error for {ip}: {e}")
         return self.set_rate_limit_db(ip, count, banned)
 
     def get_rate_limit_db(self, ip: str) -> tuple[int, bool]:
