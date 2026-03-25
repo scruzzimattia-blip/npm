@@ -264,16 +264,46 @@ class GeoResolver:
         return res
 
 RATE_LIMIT_THRESHOLD = int(os.getenv("RATE_LIMIT_THRESHOLD", "50"))
+# Time-to-live for blocked IPs cache in seconds (6 hours)
+BLOCKED_IP_CACHE_TTL = int(os.getenv("BLOCKED_IP_CACHE_TTL", "21600"))
 
 class LogHandler(FileSystemEventHandler):
+    """File handler for processing Traefik access logs in real-time."""
+    
     def __init__(self, geo, crowdsec=None):
         self.geo = geo
         self.crowdsec = crowdsec
         self.last_pos = 0
-        self.blocked_ips_cache = set()
+        # Store IP -> timestamp of when it was added to track expiration
+        self.blocked_ips_cache = {}
         self.whitelist_hosts = WHITELIST_HOSTS
         self.error_tracker = {}
         self.max_retries = 3
+
+    def _cleanup_blocked_ips_cache(self):
+        """Remove expired entries from blocked IPs cache."""
+        current_time = time.time()
+        expired_ips = [
+            ip for ip, timestamp in self.blocked_ips_cache.items()
+            if current_time - timestamp > BLOCKED_IP_CACHE_TTL
+        ]
+        for ip in expired_ips:
+            del self.blocked_ips_cache[ip]
+        
+        if expired_ips:
+            logger.debug(f"Cleaned up {len(expired_ips)} expired IP blocks from cache")
+
+    def _should_block_ip(self, ip: str) -> bool:
+        """Check if IP should be blocked, return True if not already blocked."""
+        # Cleanup old entries periodically (when cache exceeds threshold)
+        if len(self.blocked_ips_cache) > 10000:
+            self._cleanup_blocked_ips_cache()
+        
+        return ip not in self.blocked_ips_cache
+
+    def _add_to_blocked_ips_cache(self, ip: str):
+        """Add IP to blocked cache with current timestamp."""
+        self.blocked_ips_cache[ip] = time.time()
 
     def get_rate_limit_redis(self, ip: str) -> tuple[int, bool]:
         """Get rate limit info from Redis, fallback to DB on error."""
@@ -472,10 +502,10 @@ class LogHandler(FileSystemEventHandler):
                         
                         threat_score = calculate_threat_score(ip, path, attack, status_code, is_login)
                         
-                        if attack and self.crowdsec and ip not in self.blocked_ips_cache:
+                        if attack and self.crowdsec and self._should_block_ip(ip):
                             executor.submit(self.crowdsec.block_ip, ip, "24h", reason)
                             executor.submit(self.notify_discord, ip, reason, path, geo_info.get("country_code"))
-                            self.blocked_ips_cache.add(ip)
+                            self._add_to_blocked_ips_cache(ip)
                             record_stat("ips_banned", 1)
                         
                         log_entry = AccessLog(
