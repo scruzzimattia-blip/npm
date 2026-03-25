@@ -76,7 +76,7 @@ _shutdown_event = threading.Event()
 _shutdown_initiated = False
 
 def signal_handler(signum, frame):
-    \"\"\"Handle termination signals for graceful shutdown.\"\"\"
+    """Handle termination signals for graceful shutdown."""
     global _shutdown_initiated
     if not _shutdown_initiated:
         _shutdown_initiated = True
@@ -84,7 +84,7 @@ def signal_handler(signum, frame):
         _shutdown_event.set()
 
 def register_signal_handlers():
-    \"\"\"Register signal handlers for graceful shutdown.\"\"\"
+    """Register signal handlers for graceful shutdown."""
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -251,7 +251,7 @@ def is_country_blocked(country_code: Optional[str]) -> bool:
         return country_code in _blocked_countries_cache
 
 def calculate_threat_score(ip: str, path: str, is_attack: bool, status_code: int, login_attempt: bool) -> int:
-    \"\"\"Calculate threat score for a request (0-100 scale).\"\"\"
+    """Calculate threat score for a request (0-100 scale)."""
     score = 0
     if is_attack:
         score += THREAT_SCORE_ATTACK_BASE
@@ -409,7 +409,7 @@ class LogHandler(FileSystemEventHandler):
         return self.set_rate_limit_db(ip, count, banned)
 
     def get_rate_limit_db(self, ip: str) -> tuple[int, bool]:
-        \"\"\"Get rate limit from DB, checking if ban has expired.\"\"\"
+        """Get rate limit from DB, checking if ban has expired."""
         session = SessionLocal()
         try:
             entry = session.query(RateLimitEntry).filter_by(ip_address=ip).first()
@@ -424,7 +424,7 @@ class LogHandler(FileSystemEventHandler):
                         return 0, False
                 return entry.error_count, entry.is_soft_banned
         except Exception as e:
-            logger.debug(f\"Rate limit DB get error: {e}\")
+            logger.debug(f"Rate limit DB get error: {e}")
         finally:
             session.close()
         return 0, False
