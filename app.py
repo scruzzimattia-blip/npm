@@ -35,9 +35,9 @@ st.title("⚡ Traefik God Mode Monitor")
 data_limit = st.sidebar.select_slider("Data Scan Depth", options=[1000, 10000, 50000, 100000], value=50000)
 df_full = fetch_data(limit=data_limit)
 
-# Fix for AttributeError: 'str' object has no attribute 'empty' (legacy cache)
-if isinstance(df_full, str):
-    st.warning("⚠️ Stale data format detected in cache. Cleaning up...")
+# Final safety check: ensure df_full is a DataFrame and not a string/other type from cache
+if not hasattr(df_full, 'empty') or isinstance(df_full, str):
+    st.warning("⚠️ Cache corruption or stale data format detected. Cleaning up...")
     invalidate_cache()
     st.rerun()
 
