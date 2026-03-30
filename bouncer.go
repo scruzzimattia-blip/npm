@@ -69,8 +69,29 @@ func main() {
 			// If body is not empty [], it's a block
 			if len(body) > 4 { 
 				fmt.Printf("Blocking IP: %s\n", clientIP)
+				
+				// Try to extract reason from JSON
+				reason := "Security Policy Violation"
+				// Simple string searching to avoid complex JSON parsing for performance
+				// Typical JSON: "reason":"crowdsecurity/http-path-traversal-probing"
+				reasonIdx := strings.Index(string(body), "\"reason\":\"")
+				if reasonIdx != -1 {
+					start := reasonIdx + 10
+					end := strings.Index(string(body)[start:], "\"")
+					if end != -1 {
+						reason = string(body)[start : start+end]
+					}
+				}
+
 				w.Header().Set("X-Crowdsec-Decision", "ban")
-				http.Redirect(w, r, redirectURL, http.StatusFound)
+				
+				// Encode parameters for the redirect
+				target := fmt.Sprintf("%s?ip=%s&reason=%s", 
+					redirectURL, 
+					clientIP, 
+					strings.ReplaceAll(reason, " ", "+"))
+				
+				http.Redirect(w, r, target, http.StatusFound)
 				return
 			}
 		}

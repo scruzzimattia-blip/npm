@@ -51,10 +51,21 @@
             letter-spacing: 2px;
             margin-bottom: 0.5rem;
         }
+        #block-reason {
+            font-family: monospace;
+            font-size: 1.1rem;
+            color: #fff;
+            padding: 0.5rem;
+            word-break: break-all;
+        }
         .ip-address {
             color: #888;
             font-size: 0.9rem;
             margin-top: 1rem;
+        }
+        #client-ip {
+            color: #00cc96;
+            font-weight: bold;
         }
         .footer {
             margin-top: 2rem;
@@ -69,16 +80,30 @@
         <h1>Access Denied</h1>
         
         <div class="reason-box">
-            <div class="reason-label">Your IP has been blocked</div>
-            <p>Reason: Malicious activity detected by security system</p>
+            <div class="reason-label">IP Security Restriction</div>
+            <p id="block-reason">Malicious activity detected by security system</p>
         </div>
         
-        <p class="ip-address">Your IP was blocked by CrowdSec</p>
+        <p class="ip-address">Your IP address <span id="client-ip">is blocked</span> by CrowdSec</p>
         
         <div class="footer">
             <p>Protected by CrowdSec + Traefik God Mode</p>
             <p>If you believe this is an error, contact the administrator</p>
         </div>
     </div>
+
+    <script>
+        // Extract parameters from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const reason = urlParams.get('reason');
+        const ip = urlParams.get('ip');
+
+        if (reason) {
+            document.getElementById('block-reason').textContent = reason.replace(/\+/g, ' ');
+        }
+        if (ip) {
+            document.getElementById('client-ip').textContent = ip;
+        }
+    </script>
 </body>
 </html>
