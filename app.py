@@ -40,10 +40,18 @@ data_limit = st.sidebar.select_slider("Data Scan Depth", options=[1000, 10000, 5
 df_full = fetch_data(limit=data_limit)
 
 # Final safety check: ensure df_full is a DataFrame and not a string/other type from cache
-if not hasattr(df_full, 'empty') or isinstance(df_full, str):
+if not hasattr(df_full, 'empty') or isinstance(df_full, (str, dict, list)):
     st.warning("⚠️ Cache corruption or stale data format detected. Cleaning up...")
     invalidate_cache()
     st.rerun()
+
+# Validate DataFrame has required columns
+if hasattr(df_full, 'empty') and not df_full.empty:
+    required_cols = ['start_local', 'client_addr', 'request_host', 'status_code']
+    if not all(col in df_full.columns for col in required_cols):
+        st.warning("⚠️ Cache missing required columns. Cleaning up...")
+        invalidate_cache()
+        st.rerun()
 
 if df_full.empty:
     st.warning("⚠️ No traffic data found. God Mode is waiting for logs...")
