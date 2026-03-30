@@ -1,6 +1,7 @@
 import pytest
 import json
 import os
+import time
 from datetime import datetime
 import worker
 
@@ -19,9 +20,103 @@ def mock_geo(): return MockGeo()
 @pytest.fixture
 def mock_crowdsec(): return MockCrowdSec()
 
+def test_calculate_threat_score():
+    from worker import calculate_threat_score, THREAT_SCORE_ATTACK_BASE, THREAT_SCORE_SQL_INJECTION, MAX_THREAT_SCORE
+    
+    score = calculate_threat_score("1.1.1.1", "/index.html", False, 200, False)
+    assert score == 0
+    
+    score = calculate_threat_score("1.1.1.1", "/index.html", True, 200, False)
+    assert score == THREAT_SCORE_ATTACK_BASE
+    
+    score = calculate_threat_score("1.1.1.1", "/index.html?sql=union select", True, 404, False)
+    assert score == THREAT_SCORE_ATTACK_BASE + THREAT_SCORE_SQL_INJECTION + 5
+    
+    score = calculate_threat_score("1.1.1.1", "/.env", True, 404, False)
+    assert score == THREAT_SCORE_ATTACK_BASE + 15 + 5
+    
+    score = calculate_threat_score("1.1.1.1", "/wp-login", False, 401, True)
+    assert score == 40
+    
+    score = calculate_threat_score("1.1.1.1", "/api", False, 500, False)
+    assert score == 10
+    
+    score = calculate_threat_score("1.1.1.1", "/nonexistent", False, 404, False)
+    assert score == 5
+
+def test_country_blocking():
+    from worker import is_country_blocked, _blocked_countries_cache, _blocked_countries_lock
+    
+    with _blocked_countries_lock:
+        _blocked_countries_cache.clear()
+        _blocked_countries_cache.add("CN")
+        _blocked_countries_cache.add("RU")
+    
+    assert is_country_blocked("CN") is True
+    assert is_country_blocked("RU") is True
+    assert is_country_blocked("US") is False
+    assert is_country_blocked(None) is False
+
+def test_login_detection():
+    from worker import LOGIN_PATTERNS_COMPILED
+    
+    test_paths = [
+        ("/wp-login.php", True),
+        ("/admin", True),
+        ("/login", True),
+        ("/signin", True),
+        ("/auth", True),
+        ("/dashboard", True),
+        ("/administrator", True),
+        ("/phpmyadmin", True),
+        ("/console", True),
+        ("/", False),
+        ("/api/v1/data", False),
+        ("/index.html", False),
+    ]
+    
+    for path, expected in test_paths:
+        result = any(p.search(path) for p in LOGIN_PATTERNS_COMPILED)
+        assert result == expected, f"Failed for path: {path}"
+
+def test_attack_debouncing():
+    from worker import should_debounce_attack, _attack_debounce_cache, _attack_debounce_lock
+    
+    with _attack_debounce_lock:
+        _attack_debounce_cache.clear()
+    
+    ip = "8.8.8.8"
+    should_debounce_attack(ip)
+    
+    with _attack_debounce_lock:
+        assert ip in _attack_debounce_cache
+    
+    with _attack_debounce_lock:
+        _attack_debounce_cache.clear()
+    
+    result = should_debounce_attack(ip)
+    assert result is False
+    
+    time.sleep(0.1)
+    result = should_debounce_attack(ip)
+    assert result is True
+
+def test_rate_limit_db_fallback(mock_geo):
+    from worker import LogHandler
+    import worker
+    
+    worker.IGNORED_IPS_SET = set()
+    worker.IGNORED_NETWORKS = []
+    
+    handler = LogHandler(mock_geo)
+    
+    result = handler.get_rate_limit_db("192.168.1.100")
+    assert result == (0, False)
+
 def test_worker_ip_utilities():
     from worker import should_ignore_ip, ATTACK_PATTERNS_COMPILED, LOGIN_PATTERNS_COMPILED
     import ipaddress
+    import worker
     
     assert should_ignore_ip("127.0.0.1") is True
     assert should_ignore_ip("192.168.1.1") is True
@@ -29,11 +124,10 @@ def test_worker_ip_utilities():
     assert should_ignore_ip("172.16.0.1") is True
     assert should_ignore_ip("8.8.8.8") is False
     assert should_ignore_ip("1.1.1.1") is False
-    assert should_ignore_ip("92.106.189.142") is True
     
     worker.IGNORED_NETWORKS = [ipaddress.ip_network("1.2.3.4", strict=False)]
     assert should_ignore_ip("1.2.3.4") is True
-    worker.IGNORED_NETWORKS = [ipaddress.ip_network("92.106.189.142", strict=False)]
+    worker.IGNORED_NETWORKS = []
 
     is_attack = lambda p: any(r.search(p) for r in ATTACK_PATTERNS_COMPILED)
     assert not is_attack("/")
