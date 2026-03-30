@@ -14,6 +14,8 @@ from sqlalchemy import func
 from sqlalchemy.exc import OperationalError
 import re
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import ipaddress
 import concurrent.futures
 from typing import Any, Optional
@@ -23,6 +25,26 @@ import redis
 import signal
 
 LOG_FILE = os.getenv("LOG_FILE", "/app/logs/access.log")
+
+def create_session_with_retry(retries=3, backoff_factor=0.5):
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=[429, 500, 502, 503, 504],
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+_http_session = None
+
+def get_http_session():
+    global _http_session
+    if _http_session is None:
+        _http_session = create_session_with_retry()
+    return _http_session
 CITY_DB = os.getenv("CITY_DB", "/app/geoip/city.mmdb")
 ASN_DB = os.getenv("ASN_DB", "/app/geoip/asn.mmdb")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
@@ -500,7 +522,7 @@ class LogHandler(FileSystemEventHandler):
                     "timestamp": datetime.now().isoformat()
                 }]
             }
-            requests.post(DISCORD_WEBHOOK, json=payload, timeout=5)
+            get_http_session().post(DISCORD_WEBHOOK, json=payload, timeout=5)
         except Exception as e: logger.error(f"Discord error: {e}")
 
     def on_modified(self, event):
@@ -712,7 +734,7 @@ def notify_critical_error(err_msg: str):
                 "timestamp": datetime.now().isoformat()
             }]
         }
-        executor.submit(requests.post, DISCORD_WEBHOOK, json=payload, timeout=5)
+        executor.submit(get_http_session().post, DISCORD_WEBHOOK, json=payload, timeout=5)
     except Exception: pass
 
 def prometheus_metrics():
