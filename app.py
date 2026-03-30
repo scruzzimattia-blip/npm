@@ -489,6 +489,24 @@ else:
             st.subheader("🏥 System Health")
             col_h1, col_h2 = st.columns(2)
             with col_h1:
+                st.write("**🛡️ Traefik Bouncer Status**")
+                try:
+                    import requests
+                    # We can't easily reach the bouncer from the app container if it's not on the same network or port not exposed
+                    # But the bouncer is on the 'proxy' network as 'bouncer' (or 'crowdsec-app-bouncer' in docker-compose)
+                    # Let's try to query it directly (it's internal)
+                    try:
+                        # Use the service name from docker-compose.yml
+                        b_resp = requests.get("http://crowdsec-app-bouncer:8080", timeout=1)
+                        if b_resp.status_code == 200 or b_resp.status_code == 302:
+                            st.success("🟢 Bouncer Online (Port 8080)")
+                        else:
+                            st.warning(f"🟡 Bouncer responded with {b_resp.status_code}")
+                    except Exception:
+                        st.error("🔴 Bouncer Offline (Connection Refused)")
+                except Exception as e:
+                    st.error(f"Check failed: {e}")
+
                 st.write("**Database**")
                 try:
                     from sqlalchemy import text
