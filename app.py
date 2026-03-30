@@ -4,6 +4,7 @@ import os
 import plotly.express as px
 import plotly.graph_objects as go
 import logging
+import ipaddress
 from models import engine, AccessLog, SessionLocal
 from crowdsec import CrowdSecManager
 from sqlalchemy import select, func
@@ -248,6 +249,11 @@ else:
                     block_dur = st.selectbox("Duration", ["1h", "24h", "72h", "168h", "720h"], index=1)
                     block_reason = st.text_input("Reason", value="Manual Block")
                     if st.form_submit_button("🔨 Ban"):
+                        try:
+                            ipaddress.ip_address(block_ip)
+                        except ValueError:
+                            st.error("Invalid IP address")
+                            return
                         if block_ip and cs.block_ip(block_ip, duration=block_dur, reason=block_reason):
                             st.success(f"IP {block_ip} banned!")
                             st.rerun()
