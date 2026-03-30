@@ -143,15 +143,18 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     migrate_new_columns()
 
+ALLOWED_COLUMNS = {
+    "is_login_attempt": "BOOLEAN DEFAULT FALSE",
+    "threat_score": "INTEGER DEFAULT 0"
+}
+
 def migrate_new_columns():
     from sqlalchemy import text
     try:
         with engine.connect() as conn:
-            columns_to_add = [
-                ("is_login_attempt", "BOOLEAN DEFAULT FALSE"),
-                ("threat_score", "INTEGER DEFAULT 0")
-            ]
-            for col_name, col_def in columns_to_add:
+            for col_name, col_def in ALLOWED_COLUMNS.items():
+                if not col_name.replace("_", "").isalnum():
+                    continue
                 try:
                     conn.execute(text(f"ALTER TABLE access_logs ADD COLUMN {col_name} {col_def}"))
                     conn.commit()
