@@ -14,7 +14,7 @@ from data_service import (
     fetch_data, get_abuse_reputation, get_total_logs_count, fetch_logs_paginated, format_bytes,
     get_login_attempts, get_top_slowest_endpoints, get_error_trends, get_bandwidth_spikes,
     get_threat_leaders, get_blocked_countries, add_blocked_country, remove_blocked_country,
-    get_worker_stats, update_precomputed_stats
+    get_worker_stats, update_precomputed_stats, get_session
 )
 from streamlit_autorefresh import st_autorefresh
 
@@ -413,9 +413,8 @@ else:
                     
                     st.markdown(f"[AbuseIPDB](https://www.abuseipdb.com/check/{ip_in}) | [Whois](https://who.is/whois-ip/ip-address/{ip_in})")
                     
-                    session = SessionLocal()
-                    total_ip_logs = session.query(func.count(AccessLog.id)).filter(AccessLog.client_addr == ip_in).scalar()
-                    session.close()
+                    with get_session() as session:
+                        total_ip_logs = session.query(func.count(AccessLog.id)).filter(AccessLog.client_addr == ip_in).scalar()
                     
                     inv_page_size = 20
                     inv_total_pages = (total_ip_logs // inv_page_size) + (1 if total_ip_logs % inv_page_size > 0 else 0)
@@ -427,10 +426,9 @@ else:
                         with ic2:
                             st.write(f"Page {inv_page} of {inv_total_pages}")
                         
-                        session = SessionLocal()
-                        inv_query = select(AccessLog).filter(AccessLog.client_addr == ip_in).order_by(AccessLog.start_local.desc()).limit(inv_page_size).offset((inv_page-1)*inv_page_size)
-                        hist_df = pd.read_sql(inv_query, engine)
-                        session.close()
+                        with get_session() as session:
+                            inv_query = select(AccessLog).filter(AccessLog.client_addr == ip_in).order_by(AccessLog.start_local.desc()).limit(inv_page_size).offset((inv_page-1)*inv_page_size)
+                            hist_df = pd.read_sql(inv_query, engine)
                         st.dataframe(hist_df[['start_local', 'request_method', 'request_host', 'request_path', 'status_code', 'is_attack']], use_container_width=True)
                 else: st.warning("IP not found")
     
