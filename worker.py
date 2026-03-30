@@ -737,7 +737,10 @@ def notify_critical_error(err_msg: str):
             }]
         }
         executor.submit(get_http_session().post, DISCORD_WEBHOOK, json=payload, timeout=5)
-    except Exception: pass
+    except requests.RequestException as e:
+        logger.warning(f"Failed to send Discord crash alert: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error sending crash alert: {e}")
 
 def prometheus_metrics():
     metrics = []
