@@ -130,6 +130,7 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_obj)
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 if os.getenv("LOG_FORMAT") == "json":
     handler = logging.StreamHandler()
     handler.setFormatter(JSONFormatter())
