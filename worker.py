@@ -11,6 +11,7 @@ import logging
 import maxminddb
 from datetime import datetime, timedelta
 from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import OperationalError
 import re
 import requests
@@ -649,7 +650,7 @@ class LogHandler(FileSystemEventHandler):
                                 self._add_to_blocked_ips_cache(ip)
                                 record_stat("ips_banned", 1)
                         
-                        log_entry = AccessLog(
+                        stmt = insert(AccessLog).values(
                             start_local=log_time,
                             client_addr=ip,
                             country_code=geo_info.get("country_code"),
@@ -674,7 +675,10 @@ class LogHandler(FileSystemEventHandler):
                             duration=try_int(log_data.Duration),
                             content_size=try_int(log_data.DownstreamContentSize)
                         )
-                        session.add(log_entry)
+                        # Ensure we don't crash on duplicates if we re-read log lines
+                        stmt = stmt.on_conflict_do_nothing(constraint='_req_uc')
+                        session.execute(stmt)
+
                         new_count += 1
                         record_stat("logs_processed", 1)
                         if attack:
