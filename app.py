@@ -257,12 +257,14 @@ else:
                     block_dur = st.selectbox("Duration", ["1h", "24h", "72h", "168h", "720h"], index=1)
                     block_reason = st.text_input("Reason", value="Manual Block")
                     if st.form_submit_button("🔨 Ban"):
+                        valid_ip = False
                         try:
                             ipaddress.ip_address(block_ip)
+                            valid_ip = True
                         except ValueError:
                             st.error("Invalid IP address")
-                            return
-                        if block_ip and cs.block_ip(block_ip, duration=block_dur, reason=block_reason):
+                        
+                        if valid_ip and block_ip and cs.block_ip(block_ip, duration=block_dur, reason=block_reason):
                             st.success(f"IP {block_ip} banned!")
                             st.rerun()
             
