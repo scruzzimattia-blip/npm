@@ -352,6 +352,22 @@ else:
                             st.rerun()
                 else:
                     st.info("No active bans")
+
+            # --- BOUNCER AUDIT TRAIL ---
+            st.subheader("🛡️ Recent Bouncer Actions (Traefik Redirections)")
+            try:
+                from sqlalchemy import text
+                with engine.connect() as conn:
+                    # Query the new bouncer_events table
+                    audit_query = text("SELECT timestamp, ip_address, reason, user_agent FROM bouncer_events ORDER BY timestamp DESC LIMIT 10")
+                    audit_df = pd.read_sql(audit_query, conn)
+                
+                if not audit_df.empty:
+                    st.dataframe(audit_df, use_container_width=True)
+                else:
+                    st.info("No bouncer redirection events recorded yet.")
+            except Exception as e:
+                st.info("Bouncer audit logging is initializing or no data available.")
     
     with tabs[2]:
             st.subheader("🌊 Traffic Flow")
