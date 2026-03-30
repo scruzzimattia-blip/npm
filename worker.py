@@ -23,6 +23,8 @@ from pydantic import BaseModel, ConfigDict
 import threading
 import redis
 import signal
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import json
 
 LOG_FILE = os.getenv("LOG_FILE", "/app/logs/access.log")
 
@@ -772,6 +774,9 @@ if __name__ == "__main__":
     crowdsec = CrowdSecManager()
     logger.info("Ultra Worker v2.0 started (Enhanced + Retry + Redis + Metrics)")
     
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
+    
     handler = LogHandler(geo, crowdsec)
     handler.process_new_lines()
     
@@ -825,3 +830,31 @@ if __name__ == "__main__":
         SessionLocal().close()
         
         logger.info("Worker cleanup completed - exiting gracefully")
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/health" or self.path == "/healthz":
+            health = health_check()
+            self.send_response(200 if health["status"] == "healthy" else 503)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(health).encode())
+        elif self.path == "/metrics":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(prometheus_metrics().encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        pass
+
+def start_health_server(port=8081):
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthHandler)
+        logger.info(f"Health server listening on port {port}")
+        server.serve_forever()
+    except Exception as e:
+        logger.error(f"Health server error: {e}")
