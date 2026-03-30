@@ -90,9 +90,19 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		clientIP := ""
+		if cfip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); cfip != "" {
+			clientIP = cfip
+		}
+		if clientIP == "" {
+			if tcip := strings.TrimSpace(r.Header.Get("True-Client-IP")); tcip != "" {
+				clientIP = tcip
+			}
+		}
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			ips := strings.Split(xff, ",")
-			clientIP = strings.TrimSpace(ips[0])
+			if clientIP == "" {
+				ips := strings.Split(xff, ",")
+				clientIP = strings.TrimSpace(ips[0])
+			}
 		}
 		if clientIP == "" {
 			clientIP = r.Header.Get("X-Real-IP")
@@ -113,11 +123,11 @@ func main() {
 			if blocked {
 				fmt.Printf("Cached Block: %s\n", clientIP)
 				w.Header().Set("X-Crowdsec-Decision", "ban")
-				target := fmt.Sprintf("%s?ip=%s&reason=%s", 
+				target := fmt.Sprintf("%s?ip=%s&reason=%s",
 					redirectURL, clientIP, strings.ReplaceAll(reason, " ", "+"))
-				
+
 				go logEvent(clientIP, reason, target, ua)
-				
+
 				http.Redirect(w, r, target, http.StatusFound)
 				return
 			}
@@ -142,7 +152,7 @@ func main() {
 
 		if resp.StatusCode == 200 {
 			body, _ := io.ReadAll(resp.Body)
-			if len(body) > 4 { 
+			if len(body) > 4 {
 				reason := "Security Policy Violation"
 				reasonIdx := strings.Index(string(body), "\"reason\":\"")
 				if reasonIdx != -1 {
@@ -155,13 +165,13 @@ func main() {
 
 				fmt.Printf("New Block: %s (%s)\n", clientIP, reason)
 				setCache(clientIP, true, reason, 30*time.Second)
-				
+
 				w.Header().Set("X-Crowdsec-Decision", "ban")
-				target := fmt.Sprintf("%s?ip=%s&reason=%s", 
+				target := fmt.Sprintf("%s?ip=%s&reason=%s",
 					redirectURL, clientIP, strings.ReplaceAll(reason, " ", "+"))
-				
+
 				go logEvent(clientIP, reason, target, ua)
-				
+
 				http.Redirect(w, r, target, http.StatusFound)
 				return
 			}
