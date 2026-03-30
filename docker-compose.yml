@@ -96,6 +96,22 @@ services:
     networks:
       - proxy
 
+  bouncer:
+    image: debian:bookworm-slim
+    container_name: crowdsec-app-bouncer
+    restart: unless-stopped
+    command: ["/bouncer"]
+    volumes:
+      - /home/mattia/traefik-stats/bouncer:/bouncer:ro
+    environment:
+      - CROWDSEC_LAPI_URL=http://traefik-stats-crowdsec:8080
+      - CROWDSEC_LAPI_KEY=${CROWDSEC_LAPI_KEY}
+      - REDIRECT_URL=https://blocked.scruzzi.com
+    networks:
+      - proxy
+    ports:
+      - "8503:8080"
+
 networks:
   proxy:
     external: true
