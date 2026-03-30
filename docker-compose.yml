@@ -20,9 +20,7 @@ services:
       - proxy
 
   worker:
-    build: 
-      context: .
-      dockerfile: Dockerfile.worker
+    image: ghcr.io/scruzzimattia-blip/traefik-stats-worker:latest
     container_name: traefik-stats-worker
     restart: unless-stopped
     depends_on:
@@ -50,7 +48,7 @@ services:
       - proxy
 
   traefik-stats:
-    build: .
+    image: ghcr.io/scruzzimattia-blip/traefik-stats-app:latest
     container_name: traefik-stats
     restart: unless-stopped
     depends_on:
