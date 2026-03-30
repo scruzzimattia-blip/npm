@@ -69,6 +69,11 @@ CROWDSEC_REQUEST_TIMEOUT = 5
 # Processing stats
 MAX_PROCESSING_TIME_SAMPLES = 100
 
+# Attack debouncing
+ATTACK_DEBOUNCE_SECONDS = 5
+_attack_debounce_cache: dict = {}
+_attack_debounce_lock = threading.Lock()
+
 # ============================================================================
 # GRACEFUL SHUTDOWN HANDLING
 # ============================================================================
@@ -242,6 +247,21 @@ def should_ignore_ip(ip_str: str) -> bool:
                 return True
     except ValueError:
         pass
+    return False
+
+def should_debounce_attack(ip: str) -> bool:
+    """Check if IP attack should be debounced. Returns True if debounce needed."""
+    current_time = time.time()
+    with _attack_debounce_lock:
+        if ip in _attack_debounce_cache:
+            last_attack_time = _attack_debounce_cache[ip]
+            if current_time - last_attack_time < ATTACK_DEBOUNCE_SECONDS:
+                return True
+        _attack_debounce_cache[ip] = current_time
+        
+        expired = [k for k, v in _attack_debounce_cache.items() if current_time - v > 60]
+        for k in expired:
+            del _attack_debounce_cache[k]
     return False
 
 def is_country_blocked(country_code: Optional[str]) -> bool:
@@ -592,10 +612,11 @@ class LogHandler(FileSystemEventHandler):
                         threat_score = calculate_threat_score(ip, path, attack, status_code, is_login)
                         
                         if attack and self.crowdsec and self._should_block_ip(ip):
-                            executor.submit(self.crowdsec.block_ip, ip, CROWDSEC_BAN_DURATION, reason)
-                            executor.submit(self.notify_discord, ip, reason, path, geo_info.get("country_code"))
-                            self._add_to_blocked_ips_cache(ip)
-                            record_stat("ips_banned", 1)
+                            if not should_debounce_attack(ip):
+                                executor.submit(self.crowdsec.block_ip, ip, CROWDSEC_BAN_DURATION, reason)
+                                executor.submit(self.notify_discord, ip, reason, path, geo_info.get("country_code"))
+                                self._add_to_blocked_ips_cache(ip)
+                                record_stat("ips_banned", 1)
                         
                         log_entry = AccessLog(
                             start_local=log_time,
