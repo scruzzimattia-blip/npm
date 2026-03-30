@@ -403,8 +403,10 @@ else:
                         a_col1, a_col2 = st.columns(2)
                         with a_col1:
                             score = abuse_data.get('abuseConfidenceScore', 0)
-                            c = "red" if score > 50 else "orange" if score > 20 else "green"
-                            st.markdown(f"**Abuse Score:** <span style='color:{c}'>{score}%</span>", unsafe_allow_html=True)
+                            c_map = {"green": "#00CC96", "orange": "#FFA500", "red": "#EF545B"}
+                            c = c_map["red"] if score > 50 else c_map["orange"] if score > 20 else c_map["green"]
+                            st.markdown(f"**Abuse Score:** :{c}[{score}%]")
+                            st.progress(min(score / 100, 1.0))
                         with a_col2:
                             st.write(f"Reports: {abuse_data.get('totalReports', 0)}")
                             st.write(f"Domain: {abuse_data.get('domain', 'N/A')}")
