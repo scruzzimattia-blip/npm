@@ -120,6 +120,23 @@ services:
     ports:
       - "8503:8080"
 
+services:
+  lighthouse:
+    image: ghcr.io/scruzzimattia-blip/lighthouse:latest
+    container_name: lighthouse
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # Hier koennen Umgebungsvariablen konfiguriert werden.
+      - POLL_INTERVAL=300
+      - WATCH_LABEL=com.lighthouse.enable
+      - LOG_LEVEL=INFO
+      # - WEBHOOK_URL=https://discord.com/api/webhooks/...
+      # - DRY_RUN=false
+      # - MAX_WORKERS=4
+
+
 networks:
   proxy:
     external: true
