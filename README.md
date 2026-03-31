@@ -106,7 +106,7 @@ docker-compose up
 
 ## 📦 CI/CD
 
-GitHub Actions workflow (`.gitea/workflows/ci.yaml`):
+GitHub Actions workflow (`.github/workflows/ci.yaml`):
 - Runs tests on push/PR
 - Builds & pushes Docker images to Gitea container registry on main
 
