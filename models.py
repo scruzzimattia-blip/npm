@@ -33,43 +33,44 @@ class AccessLog(Base):
     __tablename__ = 'access_logs'
     
     id = Column(Integer, primary_key=True)
-    start_local = Column(DateTime, index=True)
+    start_local = Column(DateTime)
     client_addr = Column(String(MAX_IP_LENGTH), index=True)
     
     # Geo Data
-    country_code = Column(String(MAX_COUNTRY_CODE_LENGTH), index=True)
+    country_code = Column(String(MAX_COUNTRY_CODE_LENGTH))
     country_name = Column(String(MAX_COUNTRY_NAME_LENGTH))
     city_name = Column(String(MAX_CITY_NAME_LENGTH))
-    asn = Column(String(MAX_ASN_LENGTH), index=True)
+    asn = Column(String(MAX_ASN_LENGTH))
     
     # Request Data
-    request_method = Column(String(MAX_METHOD_LENGTH), index=True)
+    request_method = Column(String(MAX_METHOD_LENGTH))
     request_path = Column(String)  # Path can be long, no limit enforced
-    request_host = Column(String(MAX_HOST_LENGTH), index=True)
+    request_host = Column(String(MAX_HOST_LENGTH))
     request_protocol = Column(String(MAX_PROTOCOL_LENGTH))
     request_referer = Column(String)  # Can be long
     request_user_agent = Column(String)  # Can be long
     
     # Bot & Security Detection
-    is_bot = Column(Boolean, default=False, index=True)
-    is_attack = Column(Boolean, default=False, index=True)
-    is_login_attempt = Column(Boolean, default=False, index=True)
-    threat_score = Column(Integer, default=0, index=True)
-    browser_family = Column(String(MAX_FAMILY_LENGTH), index=True)
-    os_family = Column(String(MAX_FAMILY_LENGTH), index=True)
-    device_family = Column(String(MAX_FAMILY_LENGTH), index=True)
+    is_bot = Column(Boolean, default=False)
+    is_attack = Column(Boolean, default=False)
+    is_login_attempt = Column(Boolean, default=False)
+    threat_score = Column(Integer, default=0)
+    browser_family = Column(String(MAX_FAMILY_LENGTH))
+    os_family = Column(String(MAX_FAMILY_LENGTH))
+    device_family = Column(String(MAX_FAMILY_LENGTH))
 
     # Traefik Data
-    entry_point = Column(String(MAX_ENTRYPOINT_LENGTH), index=True)
-    status_code = Column(Integer, index=True)
-    duration = Column(BigInteger, index=True)
-    content_size = Column(BigInteger, index=True)
+    entry_point = Column(String(MAX_ENTRYPOINT_LENGTH))
+    status_code = Column(Integer)
+    duration = Column(BigInteger)
+    content_size = Column(BigInteger)
     
     __table_args__ = (
         UniqueConstraint('start_local', 'client_addr', 'request_path', 'request_method', name='_req_uc'),
         Index('idx_host_status', 'request_host', 'status_code'),
         Index('idx_time_host', 'start_local', 'request_host'),
         Index('idx_attack_time', 'is_attack', 'start_local'),
+        Index('idx_start_local_brin', 'start_local', postgresql_using='brin'),
     )
 
 class RateLimitEntry(Base):

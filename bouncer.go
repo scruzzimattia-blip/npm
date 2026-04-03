@@ -139,46 +139,54 @@ func main() {
 		url := fmt.Sprintf("%s/v1/decisions?ip=%s", lapiURL, clientIP)
 		req, _ := http.NewRequest("GET", url, nil)
 		req.Header.Set("X-Api-Key", lapiKey)
+		req.Header.Set("User-Agent", "crowdsec-traefik-bouncer")
 
-		client := &http.Client{Timeout: 1 * time.Second}
+		// Increased timeout to 2s to handle slower LAPI responses
+		client := &http.Client{Timeout: 2 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			fmt.Printf("Error querying LAPI: %v\n", err)
+			fmt.Printf("LAPI Error (%s): %v\n", clientIP, err)
 			w.Header().Set("X-Crowdsec-Decision", "none")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode == 200 {
-			body, _ := io.ReadAll(resp.Body)
-			if len(body) > 4 {
-				reason := "Security Policy Violation"
-				reasonIdx := strings.Index(string(body), "\"reason\":\"")
-				if reasonIdx != -1 {
-					start := reasonIdx + 10
-					end := strings.Index(string(body)[start:], "\"")
-					if end != -1 {
-						reason = string(body)[start : start+end]
-					}
-				}
-
-				fmt.Printf("New Block: %s (%s)\n", clientIP, reason)
-				setCache(clientIP, true, reason, 30*time.Second)
-
-				w.Header().Set("X-Crowdsec-Decision", "ban")
-				target := fmt.Sprintf("%s?ip=%s&reason=%s",
-					redirectURL, clientIP, strings.ReplaceAll(reason, " ", "+"))
-
-				go logEvent(clientIP, reason, target, ua)
-
-				http.Redirect(w, r, target, http.StatusFound)
-				return
-			}
+		if resp.StatusCode != 200 {
+			fmt.Printf("LAPI returned %d for %s\n", resp.StatusCode, clientIP)
+			w.Header().Set("X-Crowdsec-Decision", "none")
+			w.WriteHeader(http.StatusOK)
+			return
 		}
 
-		// Cache "clean" IPs for 1 minute
-		setCache(clientIP, false, "", 1*time.Minute)
+		body, _ := io.ReadAll(resp.Body)
+		if len(body) > 4 { // Decision list is not empty
+			reason := "Security Policy Violation"
+			// Very basic JSON extraction to avoid heavy dependencies
+			reasonIdx := strings.Index(string(body), "\"reason\":\"")
+			if reasonIdx != -1 {
+				start := reasonIdx + 10
+				end := strings.Index(string(body)[start:], "\"")
+				if end != -1 {
+					reason = string(body)[start : start+end]
+				}
+			}
+
+			fmt.Printf("New Block: %s (%s)\n", clientIP, reason)
+			setCache(clientIP, true, reason, 5*time.Minute) // Increased cache for blocks
+
+			w.Header().Set("X-Crowdsec-Decision", "ban")
+			target := fmt.Sprintf("%s?ip=%s&reason=%s",
+				redirectURL, clientIP, strings.ReplaceAll(reason, " ", "+"))
+
+			go logEvent(clientIP, reason, target, ua)
+
+			http.Redirect(w, r, target, http.StatusFound)
+			return
+		}
+
+		// Cache "clean" IPs for 2 minutes to reduce LAPI load
+		setCache(clientIP, false, "", 2*time.Minute)
 		w.Header().Set("X-Crowdsec-Decision", "none")
 		w.WriteHeader(http.StatusOK)
 	})
