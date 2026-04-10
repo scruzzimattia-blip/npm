@@ -28,6 +28,13 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 
 LOG_FILE = os.getenv("LOG_FILE", "/app/logs/access.log")
+# traefik: JSON access log lines (legacy). nginx: nginx combined (Nginx Proxy Manager default).
+ACCESS_LOG_FORMAT = os.getenv("ACCESS_LOG_FORMAT", "nginx").strip().lower()
+
+# Nginx combined: $remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent ...
+NGINX_COMBINED_RE = re.compile(
+    r'^(\S+) \S+ \S+ \[([^\]]+)\] "([^"]*)" (\d+) (\d+) "([^"]*)" "([^"]*)"\s*$'
+)
 
 def create_session_with_retry(retries=3, backoff_factor=0.5):
     session = requests.Session()
@@ -138,7 +145,7 @@ if os.getenv("LOG_FORMAT") == "json":
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
-logger.info("Starting Traefik God Mode Worker v2.0")
+logger.info("Starting NPM Proxy Monitor Worker v2.0 (ACCESS_LOG_FORMAT=%s)", ACCESS_LOG_FORMAT)
 
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=EXECUTOR_MAX_WORKERS)
 
@@ -197,7 +204,8 @@ def try_int(val: Any) -> int:
     except (ValueError, TypeError):
         return 0
 
-class TraefikLogData(BaseModel):
+class ProxyAccessLogFields(BaseModel):
+    """Unified fields from Traefik JSON logs or nginx combined (NPM) lines."""
     model_config = ConfigDict(extra='ignore')
     StartLocal: str = ""
     ClientAddr: str = ""
@@ -211,6 +219,71 @@ class TraefikLogData(BaseModel):
     DownstreamStatus: Any = 0
     Duration: Any = 0
     DownstreamContentSize: Any = 0
+
+
+def split_request_line(request: str) -> tuple[str, str, str]:
+    """Parse METHOD path PROTO from nginx $request."""
+    if not request or request == "-":
+        return "GET", "/", "HTTP/1.0"
+    parts = request.split(" ", 2)
+    if len(parts) < 2:
+        return (parts[0] if parts else "GET"), "/", "HTTP/1.0"
+    method = parts[0]
+    if len(parts) == 2:
+        return method, parts[1], "HTTP/1.0"
+    return method, parts[1], parts[2]
+
+
+def parse_nginx_combined_line(line: str) -> Optional[ProxyAccessLogFields]:
+    """Parse one nginx combined log line (Nginx Proxy Manager default access format)."""
+    m = NGINX_COMBINED_RE.match(line.strip())
+    if not m:
+        return None
+    client_addr, time_local, request, status, body_bytes, referer, ua = m.groups()
+    try:
+        log_time = datetime.strptime(time_local, "%d/%b/%Y:%H:%M:%S %z")
+    except ValueError:
+        try:
+            log_time = datetime.strptime(time_local, "%d/%b/%Y:%H:%M:%S")
+        except ValueError:
+            return None
+    method, path, protocol = split_request_line(request)
+    try:
+        status_int = int(status)
+        bytes_int = int(body_bytes)
+    except ValueError:
+        return None
+    return ProxyAccessLogFields(
+        StartLocal=log_time.isoformat(),
+        ClientAddr=client_addr,
+        RequestUserAgent=ua or "",
+        RequestPath=path,
+        RequestHost="",
+        RequestMethod=method,
+        RequestProtocol=protocol,
+        RequestReferer="" if referer == "-" else referer,
+        EntryPointName="nginx",
+        DownstreamStatus=status_int,
+        Duration=0,
+        DownstreamContentSize=bytes_int,
+    )
+
+
+def parse_proxy_access_line(line: str) -> Optional[ProxyAccessLogFields]:
+    """Parse one log line according to ACCESS_LOG_FORMAT."""
+    line = line.strip()
+    if not line:
+        return None
+    if ACCESS_LOG_FORMAT == "traefik":
+        try:
+            raw_data = json.loads(line)
+            return ProxyAccessLogFields(**raw_data)
+        except (json.JSONDecodeError, ValueError):
+            return None
+    if ACCESS_LOG_FORMAT == "nginx":
+        return parse_nginx_combined_line(line)
+    logger.warning("Unknown ACCESS_LOG_FORMAT=%s", ACCESS_LOG_FORMAT)
+    return None
 
 WHITELIST_HOSTS = set(os.getenv("WHITELIST_HOSTS", "cloud.scruzzi.com,jellyfin.scruzzi.com").split(","))
 
@@ -392,7 +465,7 @@ class GeoResolver:
         return res
 
 class LogHandler(FileSystemEventHandler):
-    """File handler for processing Traefik access logs in real-time."""
+    """File handler for processing proxy access logs (Traefik JSON or nginx combined) in real-time."""
     
     def __init__(self, geo, crowdsec=None):
         self.geo = geo
@@ -585,9 +658,10 @@ class LogHandler(FileSystemEventHandler):
                 f.seek(self.last_pos)
                 for line in f:
                     try:
-                        raw_data = json.loads(line)
-                        log_data = TraefikLogData(**raw_data)
-                        
+                        log_data = parse_proxy_access_line(line)
+                        if log_data is None:
+                            continue
+
                         raw_time = log_data.StartLocal
                         if not raw_time:
                             continue
@@ -691,8 +765,6 @@ class LogHandler(FileSystemEventHandler):
                                 session.rollback()
                                 logger.error(f"Batch commit error: {e}")
                                 record_stat("db_errors", 1)
-                    except json.JSONDecodeError:
-                        continue
                     except Exception as e:
                         logger.error(f"Error parsing log line: {e}")
                         continue

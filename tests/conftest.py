@@ -1,8 +1,12 @@
+import os
+
+# Default to Traefik JSON lines for existing tests (before worker is imported).
+os.environ.setdefault("ACCESS_LOG_FORMAT", "traefik")
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import Base
-import os
 
 @pytest.fixture(scope="session")
 def engine():

@@ -223,5 +223,50 @@ def test_log_processing(session, mock_geo, mock_crowdsec, tmp_path):
     
     entry = session.query(worker.AccessLog).filter_by(client_addr="127.0.0.1").first()
     assert entry is None
-    
+
     worker.LOG_FILE = original_file
+
+
+def test_parse_nginx_combined_line():
+    from worker import parse_nginx_combined_line
+
+    line = (
+        '172.17.0.1 - - [10/Apr/2026:12:00:00 +0000] '
+        '"GET /api/foo?x=1 HTTP/1.1" 200 1234 "-" "Mozilla/5.0"'
+    )
+    p = parse_nginx_combined_line(line)
+    assert p is not None
+    assert p.ClientAddr == "172.17.0.1"
+    assert p.RequestPath == "/api/foo?x=1"
+    assert p.RequestMethod == "GET"
+    assert p.DownstreamStatus == 200
+    assert p.DownstreamContentSize == 1234
+    assert p.EntryPointName == "nginx"
+
+
+def test_nginx_log_processing(session, mock_geo, mock_crowdsec, tmp_path):
+    import worker
+
+    nginx_log = tmp_path / "nginx_access.log"
+    nginx_log.write_text(
+        '8.8.8.8 - - [10/Apr/2026:12:00:00 +0000] '
+        '"GET /safe-path HTTP/1.1" 200 512 "-" "Mozilla/5.0"\n'
+    )
+
+    original_file = worker.LOG_FILE
+    original_fmt = worker.ACCESS_LOG_FORMAT
+
+    worker.LOG_FILE = str(nginx_log)
+    worker.ACCESS_LOG_FORMAT = "nginx"
+    worker.SessionLocal = lambda: session
+
+    handler = worker.LogHandler(mock_geo, mock_crowdsec)
+    handler.process_new_lines()
+
+    entry = session.query(worker.AccessLog).filter_by(client_addr="8.8.8.8").first()
+    assert entry is not None
+    assert entry.request_path == "/safe-path"
+    assert entry.is_attack is False
+
+    worker.LOG_FILE = original_file
+    worker.ACCESS_LOG_FORMAT = original_fmt
