@@ -92,8 +92,8 @@ def update_precomputed_stats():
                             session.add(PrecomputedStats(stat_type="avg_latency", period=period, key=path, value=float(avg_ms)))
             
             session.commit()
-            CacheService.delete_pattern("traefik_stats:fetch_data:*")
-            CacheService.delete_pattern("traefik_stats:precomputed_stats:*")
+            CacheService.delete_pattern("proxy_stats:fetch_data:*")
+            CacheService.delete_pattern("proxy_stats:precomputed_stats:*")
         except Exception as e:
             logger.error(f"Precompute error: {e}")
 
@@ -129,7 +129,7 @@ def get_abuse_reputation(ip):
     return None
 
 def get_total_logs_count(filter_attack=False):
-    cache_key = f"traefik_stats:logs_count:{filter_attack}"
+    cache_key = f"proxy_stats:logs_count:{filter_attack}"
     cached = CacheService.get(cache_key)
     if cached is not None:
         return cached
@@ -215,7 +215,7 @@ def get_bandwidth_spikes(hours=24):
 
 @cached(ttl=180, key_prefix="threat_leaders")
 def get_threat_leaders(limit=20):
-    cache_key = f"traefik_stats:threat_leaders:{limit}"
+    cache_key = f"proxy_stats:threat_leaders:{limit}"
     cached = CacheService.get(cache_key)
     if cached is not None:
         return pd.DataFrame(cached) if cached else pd.DataFrame()
@@ -247,7 +247,7 @@ def get_threat_leaders(limit=20):
 
 def get_blocked_countries():
     """Get list of blocked countries."""
-    cache_key = "traefik_stats:blocked_countries"
+    cache_key = "proxy_stats:blocked_countries"
     cached = CacheService.get(cache_key)
     if cached is not None:
         return [BlockedCountry(**c) for c in cached] if cached else []
@@ -270,7 +270,7 @@ def add_blocked_country(country_code: str, reason: str = ""):
                 blocked = BlockedCountry(country_code=country_code.upper(), reason=reason, active=True)
                 session.add(blocked)
                 session.commit()
-                CacheService.delete("traefik_stats:blocked_countries")
+                CacheService.delete("proxy_stats:blocked_countries")
                 return True
         except Exception as e:
             logger.error(f"Block country error: {e}")
@@ -283,7 +283,7 @@ def remove_blocked_country(country_code: str):
             if entry:
                 entry.active = False
                 session.commit()
-                CacheService.delete("traefik_stats:blocked_countries")
+                CacheService.delete("proxy_stats:blocked_countries")
                 return True
         except Exception as e:
             logger.error(f"Remove block error: {e}")

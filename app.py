@@ -61,7 +61,7 @@ from streamlit_autorefresh import st_autorefresh
 
 logger = logging.getLogger(__name__)
 
-st.set_page_config(page_title="Traefik God Mode Monitor", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="Nginx Proxy Manager Monitor", layout="wide", page_icon="⚡")
 
 st.markdown("""
 <style>
@@ -80,7 +80,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ Traefik God Mode Monitor")
+st.title("⚡ Nginx Proxy Manager Monitor")
 
 # Sidebar: Data Limit
 data_limit = st.sidebar.select_slider("Data Scan Depth", options=[1000, 10000, 50000, 100000], value=50000)
@@ -358,7 +358,7 @@ else:
                     st.info("No active bans")
 
             # --- BOUNCER AUDIT TRAIL ---
-            st.subheader("🛡️ Recent Bouncer Actions (Traefik Redirections)")
+            st.subheader("🛡️ Recent Bouncer Actions (CrowdSec redirects)")
             try:
                 from sqlalchemy import text
                 with engine.connect() as conn:
@@ -529,13 +529,13 @@ else:
             
             col_l1, col_l2 = st.columns(2)
             with col_l1: st.button("🔄 Refresh")
-            with col_l2: st.download_button("📥 Export CSV", data=df.to_csv(index=False), file_name=f"traefik_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv")
+            with col_l2: st.download_button("📥 Export CSV", data=df.to_csv(index=False), file_name=f"npm_proxy_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv")
     
     with tabs[5]:
             st.subheader("🏥 System Health")
             col_h1, col_h2 = st.columns(2)
             with col_h1:
-                st.write("**🛡️ Traefik Bouncer Status**")
+                st.write("**🛡️ CrowdSec bouncer status**")
                 try:
                     import requests
                     # We can't easily reach the bouncer from the app container if it's not on the same network or port not exposed

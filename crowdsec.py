@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 class CrowdSecManager:
     def __init__(self):
         self.api_url = os.getenv("CROWDSEC_LAPI_URL", "http://crowdsec:8080").rstrip("/")
+        self.client_id = os.getenv("CROWDSEC_CLIENT_ID", "npm-proxy-monitor")
         self.api_key = os.getenv("CROWDSEC_LAPI_KEY")
         self.machine_login = os.getenv("CROWDSEC_MACHINE_LOGIN", "localhost")
         self.machine_password = os.getenv("CROWDSEC_MACHINE_PASSWORD")
@@ -15,12 +16,12 @@ class CrowdSecManager:
         # Headers for bouncer operations (GET/DELETE)
         self.bouncer_headers = {
             "X-Api-Key": self.api_key,
-            "User-Agent": "traefik-god-mode",
+            "User-Agent": self.client_id,
         }
-        
+
         # Headers for machine operations (POST) - using password auth
         self.machine_headers = {
-            "User-Agent": "traefik-god-mode",
+            "User-Agent": self.client_id,
         }
 
     def _get_token(self) -> Optional[str]:
@@ -39,7 +40,7 @@ class CrowdSecManager:
             logger.error(f"Failed to get CrowdSec token: {e}")
         return None
 
-    def block_ip(self, ip: str, duration: str = "24h", reason: str = "Traefik God Mode Detection"):
+    def block_ip(self, ip: str, duration: str = "24h", reason: str = "NPM proxy monitor detection"):
         """Create a ban decision in CrowdSec via LAPI."""
         token = self._get_token()
         if not token:
@@ -73,7 +74,7 @@ class CrowdSecManager:
             "decisions": [
                 {
                     "duration": duration,
-                    "origin": "traefik-god-mode",
+                    "origin": self.client_id,
                     "scenario": reason,
                     "scope": "Ip",
                     "type": "ban",

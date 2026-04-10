@@ -1,4 +1,4 @@
-module traefik-bouncer
+module npm-proxy-bouncer
 
 go 1.22.2
 

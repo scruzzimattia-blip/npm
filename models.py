@@ -59,7 +59,7 @@ class AccessLog(Base):
     os_family = Column(String(MAX_FAMILY_LENGTH))
     device_family = Column(String(MAX_FAMILY_LENGTH))
 
-    # Traefik Data
+    # Reverse proxy / upstream (Traefik entrypoint or nginx)
     entry_point = Column(String(MAX_ENTRYPOINT_LENGTH))
     status_code = Column(Integer)
     duration = Column(BigInteger)
@@ -135,7 +135,7 @@ class PrecomputedStats(Base):
     )
 
 class BouncerEvent(Base):
-    """Logs of IPs redirected by the Traefik bouncer."""
+    """Logs of IPs redirected by the CrowdSec bouncer."""
     __tablename__ = 'bouncer_events'
     
     id = Column(Integer, primary_key=True)

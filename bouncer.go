@@ -62,7 +62,7 @@ func logEvent(ip, reason, target, ua string) {
 func main() {
 	lapiURL := os.Getenv("CROWDSEC_LAPI_URL")
 	if lapiURL == "" {
-		lapiURL = "http://traefik-stats-crowdsec:8080"
+		lapiURL = "http://crowdsec:8080"
 	}
 	lapiKey := os.Getenv("CROWDSEC_LAPI_KEY")
 	redirectURL := os.Getenv("REDIRECT_URL")
@@ -139,7 +139,7 @@ func main() {
 		url := fmt.Sprintf("%s/v1/decisions?ip=%s", lapiURL, clientIP)
 		req, _ := http.NewRequest("GET", url, nil)
 		req.Header.Set("X-Api-Key", lapiKey)
-		req.Header.Set("User-Agent", "crowdsec-traefik-bouncer")
+		req.Header.Set("User-Agent", "crowdsec-npm-proxy-bouncer")
 
 		// Increased timeout to 2s to handle slower LAPI responses
 		client := &http.Client{Timeout: 2 * time.Second}

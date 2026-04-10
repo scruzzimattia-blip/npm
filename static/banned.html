@@ -87,7 +87,7 @@
         <p class="ip-address">Your IP address <span id="client-ip">is blocked</span> by CrowdSec</p>
         
         <div class="footer">
-            <p>Protected by CrowdSec + Traefik God Mode</p>
+            <p>Protected by CrowdSec + Nginx Proxy Manager Monitor</p>
             <p>If you believe this is an error, contact the administrator</p>
         </div>
     </div>
@@ -102,7 +102,7 @@
             'crowdsecurity/http-probing': 'Automated vulnerability scanning detected.',
             'crowdsecurity/http-bad-user-agent': 'Access attempt from a malicious or blacklisted bot.',
             'crowdsecurity/http-cve-2021-44228': 'Log4j exploitation attempt detected.',
-            'traefik-god-mode': 'Manual block or custom attack pattern triggered.'
+            'npm-proxy-monitor': 'Manual block or custom attack pattern triggered.'
         };
 
         const urlParams = new URLSearchParams(window.location.search);

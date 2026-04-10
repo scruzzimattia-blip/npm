@@ -180,7 +180,7 @@ def cached(ttl: int = 300, key_prefix: str = "cache"):
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
-            cache_key = _make_cache_key(f"traefik_stats:{key_prefix}:{func.__name__}", *args, **kwargs)
+            cache_key = _make_cache_key(f"proxy_stats:{key_prefix}:{func.__name__}", *args, **kwargs)
             
             cached_value = CacheService.get(cache_key)
             if cached_value is not None:
@@ -195,5 +195,5 @@ def cached(ttl: int = 300, key_prefix: str = "cache"):
         return wrapper
     return decorator
 
-def invalidate_cache(prefix: str = "traefik_stats:*"):
+def invalidate_cache(prefix: str = "proxy_stats:*"):
     return CacheService.delete_pattern(prefix)
