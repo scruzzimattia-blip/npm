@@ -40,7 +40,7 @@ jobs:
     needs: test
     env:
       REGISTRY: git.scruzzi.com
-      IMAGE_PREFIX: Mattia/npm
+      IMAGE_PREFIX: mattia/npm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
